@@ -1,0 +1,5 @@
+{
+  "name": "EasyFramework.DevTools",
+  "rootNamespace": "EasyFramework.DevTools",
+  "references": ["EasyFramework.Core", "UniTask", "VContainer", "MessagePipe"]
+}

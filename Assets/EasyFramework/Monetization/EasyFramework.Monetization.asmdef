@@ -1,0 +1,5 @@
+{
+  "name": "EasyFramework.Monetization",
+  "rootNamespace": "EasyFramework.Monetization",
+  "references": ["EasyFramework.Core", "UniTask", "VContainer", "MessagePipe"]
+}

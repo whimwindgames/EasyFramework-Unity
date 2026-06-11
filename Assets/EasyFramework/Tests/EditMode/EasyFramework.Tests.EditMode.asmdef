@@ -1,0 +1,9 @@
+{
+  "name": "EasyFramework.Tests.EditMode",
+  "rootNamespace": "EasyFramework.Tests",
+  "references": ["EasyFramework.Core", "EasyFramework.Boot", "UniTask", "VContainer", "MessagePipe", "MessagePipe.VContainer", "UnityEngine.TestRunner", "UnityEditor.TestRunner"],
+  "includePlatforms": ["Editor"],
+  "precompiledReferences": ["nunit.framework.dll"],
+  "defineConstraints": ["UNITY_INCLUDE_TESTS"],
+  "overrideReferences": true
+}

@@ -1,5 +1,36 @@
 {
   "dependencies": {
+    "com.coplaydev.unity-mcp": {
+      "version": "https://github.com/CoplayDev/unity-mcp.git?path=/MCPForUnity#main",
+      "depth": 0,
+      "source": "git",
+      "dependencies": {
+        "com.unity.nuget.newtonsoft-json": "3.0.2",
+        "com.unity.test-framework": "1.1.31"
+      },
+      "hash": "78ee5418415953b79c358bfe6355fcc3fde7912b"
+    },
+    "com.cysharp.messagepipe": {
+      "version": "https://github.com/Cysharp/MessagePipe.git?path=src/MessagePipe.Unity/Assets/Plugins/MessagePipe#1.8.1",
+      "depth": 0,
+      "source": "git",
+      "dependencies": {},
+      "hash": "e901746b927bcd84ad94d642512a7a7a7600d15b"
+    },
+    "com.cysharp.messagepipe.vcontainer": {
+      "version": "https://github.com/Cysharp/MessagePipe.git?path=src/MessagePipe.Unity/Assets/Plugins/MessagePipe.VContainer#1.8.1",
+      "depth": 0,
+      "source": "git",
+      "dependencies": {},
+      "hash": "e901746b927bcd84ad94d642512a7a7a7600d15b"
+    },
+    "com.cysharp.unitask": {
+      "version": "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask#2.5.10",
+      "depth": 0,
+      "source": "git",
+      "dependencies": {},
+      "hash": "7c0f199fe0d3fc528024488ccd671e6c7b27745b"
+    },
     "com.unity.2d.animation": {
       "version": "13.0.4",
       "depth": 0,
@@ -184,6 +215,13 @@
       "dependencies": {},
       "url": "https://packages.unity.com"
     },
+    "com.unity.nuget.newtonsoft-json": {
+      "version": "3.2.1",
+      "depth": 0,
+      "source": "registry",
+      "dependencies": {},
+      "url": "https://packages.unity.com"
+    },
     "com.unity.render-pipelines.core": {
       "version": "17.3.0",
       "depth": 1,
@@ -282,6 +320,13 @@
         "com.unity.modules.jsonserialize": "1.0.0"
       },
       "url": "https://packages.unity.com"
+    },
+    "jp.hadashikick.vcontainer": {
+      "version": "https://github.com/hadashiA/VContainer.git?path=VContainer/Assets/VContainer#1.16.9",
+      "depth": 0,
+      "source": "git",
+      "dependencies": {},
+      "hash": "0522be3ef0bb03a3dd8866d43090b6e7ea22884a"
     },
     "com.unity.modules.accessibility": {
       "version": "1.0.0",

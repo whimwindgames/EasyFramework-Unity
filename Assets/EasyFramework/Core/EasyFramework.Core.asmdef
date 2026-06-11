@@ -1,0 +1,6 @@
+{
+  "name": "EasyFramework.Core",
+  "rootNamespace": "EasyFramework.Core",
+  "references": ["UniTask", "VContainer", "MessagePipe", "MessagePipe.VContainer"],
+  "noEngineReferences": false
+}
