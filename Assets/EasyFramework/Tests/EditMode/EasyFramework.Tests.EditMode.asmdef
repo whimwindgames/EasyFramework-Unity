@@ -1,9 +1,22 @@
 {
   "name": "EasyFramework.Tests.EditMode",
   "rootNamespace": "EasyFramework.Tests",
-  "references": ["EasyFramework.Core", "EasyFramework.Boot", "UniTask", "VContainer", "MessagePipe", "MessagePipe.VContainer", "UnityEngine.TestRunner", "UnityEditor.TestRunner"],
+  "references": [
+    "EasyFramework.Core",
+    "EasyFramework.Services",
+    "EasyFramework.Boot",
+    "UniTask",
+    "VContainer",
+    "MessagePipe",
+    "MessagePipe.VContainer",
+    "Unity.Addressables",
+    "Unity.ResourceManager",
+    "UnityEngine.TestRunner",
+    "UnityEditor.TestRunner"
+  ],
   "includePlatforms": ["Editor"],
-  "precompiledReferences": ["nunit.framework.dll"],
+  "precompiledReferences": ["nunit.framework.dll", "Newtonsoft.Json.dll"],
   "defineConstraints": ["UNITY_INCLUDE_TESTS"],
-  "overrideReferences": true
+  "overrideReferences": true,
+  "autoReferenced": false
 }

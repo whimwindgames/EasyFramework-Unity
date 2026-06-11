@@ -1,5 +1,21 @@
 {
   "name": "EasyFramework.Services",
   "rootNamespace": "EasyFramework.Services",
-  "references": ["EasyFramework.Core", "UniTask", "VContainer", "MessagePipe"]
+  "references": [
+    "EasyFramework.Core",
+    "UniTask",
+    "UniTask.Addressables",
+    "VContainer",
+    "MessagePipe",
+    "Unity.Addressables",
+    "Unity.ResourceManager"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": true,
+  "precompiledReferences": ["Newtonsoft.Json.dll"],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "noEngineReferences": false
 }
