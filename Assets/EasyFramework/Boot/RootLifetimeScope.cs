@@ -1,5 +1,9 @@
+using System.Collections.Generic;
 using EasyFramework.Core.Boot;
 using EasyFramework.Core.Timing;
+using EasyFramework.Services.Configs;
+using EasyFramework.Services.Saves;
+using UnityEngine;
 using VContainer;
 using VContainer.Unity;
 
@@ -8,14 +12,35 @@ namespace EasyFramework
     /// <summary>框架组合根。挂在 Boot 场景的常驻 GameObject 上。</summary>
     public class RootLifetimeScope : LifetimeScope
     {
+        [Header("本地配置表(可空)")]
+        [SerializeField] List<ConfigTable> _configTables = new();
+
+        [Header("初始场景名")]
+        [SerializeField] string _initialScene = "Boot";
+
         protected override void Configure(IContainerBuilder builder)
         {
-            FrameworkInstaller.Install(builder);
+            var options = new FrameworkOptions
+            {
+                SaveDirectory = Application.persistentDataPath,
+                ConfigTables = _configTables,
+                SaveProfile = null,
+                InitialScene = _initialScene,
+            };
+
+            FrameworkInstaller.Install(builder, options);
 
             builder.RegisterEntryPoint<GameBootstrap>();
-            // TimerService 已在 Installer 注册为单例,这里把它桥接到 VContainer Tick 调度
             builder.UseEntryPoints(ep => ep.Add<TimerTicker>());
-            builder.RegisterBuildCallback(r => G.Initialize(r));
+
+            // SaveOnPauseListener 挂到本组合根 GameObject,build 后绑定 ISaveService。
+            var pauseListener = gameObject.AddComponent<SaveOnPauseListener>();
+
+            builder.RegisterBuildCallback(r =>
+            {
+                pauseListener.Bind(r.Resolve<ISaveService>());
+                G.Initialize(r);
+            });
         }
     }
 
