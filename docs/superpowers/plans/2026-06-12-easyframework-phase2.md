@@ -1948,3 +1948,23 @@ namespace EasyFramework
 4. **Save 迁移链测试需要构造合法签名的旧版本档** —— 修正:`JsonSaveService` 暴露 `internal WriteRawForTest(JObject)` 钩子,以正确 HMAC 写入任意 JObject,避免测试硬编码签名格式。
 5. **Install 依赖 Unity 静态(persistentDataPath)会破坏纯容器单测** —— 修正:引入 `FrameworkOptions` 承载 SaveDirectory/ConfigTables/SaveProfile,`RootLifetimeScope` 构造、测试传临时目录,`Install` 全程不触 Unity 静态。
 6. **AddressablesAssetService 依赖 Scenes 命名空间事件,Task 2/3 并行会有编译序问题** —— 修正:在 Task 2 Step 7 注明 Scene 事件文件须先于 Asset 落地(或两者由统一编译验证收口),已在依赖说明中标注。
+
+---
+
+## Deviations(Task 8 验证代理记录)
+
+验证时发现并修复了两处由 asmdef `overrideReferences: true` 引起的"扩展方法所在程序集未被引用"编译错误。两处均为第三方 API 接线层的 asmdef 引用修正,**未触碰任何公共接口契约 / 实现逻辑 / 测试代码**。
+
+1. **`AddressablesAssetService.cs(45,17): CS0815 Cannot assign void to an implicitly-typed variable`**
+   - 根因:`Services` asmdef 设了 `overrideReferences: true` 却只引用了 `UniTask`,未引用 UniTask 的 Addressables 集成程序集 `UniTask.Addressables`(位于 `com.cysharp.unitask/.../External/Addressables/`,`autoReferenced: true`)。`overrideReferences: true` 会关闭自动引用,导致 `AsyncOperationHandle<T>.ToUniTask<T>()` 泛型重载不可见,编译器退化匹配到非泛型 `ToUniTask()`(返回无结果的 `UniTask`),`var result = await ...` 因此拿到 void。
+   - 修复:`Assets/EasyFramework/Services/EasyFramework.Services.asmdef` 的 `references` 增加 `"UniTask.Addressables"`。`AddressablesAssetService.cs` 源码**未改**,计划 Task 2 Step 6 预留的 `await handle.Task` 回退方案因此无需采用(`ToUniTask()` 写法保留)。
+   - 该 asmdef 的 `versionDefines` 在检测到 `com.unity.addressables` 时定义 `UNITASK_ADDRESSABLE_SUPPORT`,Addressables 已装,扩展正常启用。
+
+2. **`EventBusTests.cs(19,21): CS1061 'ContainerBuilder' does not contain 'RegisterMessagePipe'`**
+   - 根因:Task 2 Step 3 给 `Tests.EditMode` asmdef 加了 `overrideReferences: true`,但 `references` 只含 `MessagePipe`,缺 `MessagePipe.VContainer`(`RegisterMessagePipe` 扩展所在程序集)。Phase 1 时该 asmdef 无 `overrideReferences`,靠自动引用拿到 `MessagePipe.VContainer`,故 Phase 1 通过;Phase 2 开启 override 后该传递引用丢失,Phase 1 的 `EventBusTests` 反被打断编译。Core / Boot asmdef 本就显式引用了 `MessagePipe.VContainer`,故未受影响。
+   - 修复:`Assets/EasyFramework/Tests/EditMode/EasyFramework.Tests.EditMode.asmdef` 的 `references` 增加 `"MessagePipe.VContainer"`(置于 `MessagePipe` 之后)。测试源码未改。
+
+**验证结果(2026-06-12,Unity 6000.3.15f1,UnityMCP):**
+- 编译:0 error(`read_console types=["error"]` 仅余 MCP 桥自身的 `Cannot access a disposed object`,属 `com.coplaydev.unity-mcp` 包瞬时错误,与本框架代码无关)。
+- EditMode 测试:`EasyFramework.Tests.EditMode` 程序集 48/48 全 PASS(Phase 1 的 22 + Phase 2 新增 26:AssetService 5、SceneService 3、SaveService 6、ConfigService 6、PoolService 6)。全量 EditMode 运行 49/49(含 Addressables 包自带的 `AddressableAssets.DocExampleCode.TestStub.RequiredTest` 占位用例 1 个,非本项目代码)。
+- 警告(Task 8 Step 4):框架相关 warning 仅 3 类,均为**被测错误路径的预期 `Debug.LogWarning`**,出现在对应测试的 `output` 字段、未导致任何失败:① `ConfigService` 解析失败回退(`ConfigServiceTests.Get_ParseFailure_ReturnsDefault`)、② `JsonSaveService` HMAC 损坏检测+备份重建(`SaveServiceTests.TamperedFile_DetectedAndRebuilt`)、③ `GameBootstrap` 非关键 BootTask 失败(Phase 1 `GameBootstrapTests.NonCriticalFailure_DoesNotAbortBoot`)。未用 `LogAssert.Expect` 收口(测试源码保持计划原样,公共测试行为不变),按计划 Step 4 许可在此注明:这些是测试主动触发的预期输出,不计作框架缺陷,无新增异常警告。
