@@ -1144,3 +1144,16 @@ namespace EasyFramework
 - Spec 覆盖:Phase 1 范围 = 设计文档 §10 Phase 1 条目(asmdef、VContainer、Bootstrap、G、EventBus、StateMachine、Timer)+ ObjectPool(设计 §3.4,纯 C# 部分;GameObject 池依赖 Phase 2 Asset 服务,延后)。✓
 - 类型一致性:`IBootTask.Priority/IsCritical/InitializeAsync`、`IEventBus.Publish/Subscribe`、`ITimerService.Schedule/Cancel`、`G.Events/Timer/IsInitialized/Initialize/Reset` 在测试与实现间已核对。✓
 - 占位符:无 TBD;两处"版本/API 可能漂移"均给出具体回退动作(去 tag 重装、查文档改注册写法、EventBus 自实现回退)。✓
+
+---
+
+## Deviations
+
+验证代理(Task 9/10)记录的实际偏差:
+
+1. **Tests asmdef 增加 `MessagePipe.VContainer` 引用**(`Assets/EasyFramework/Tests/EditMode/EasyFramework.Tests.EditMode.asmdef`)。
+   - 计划 Task 2 Step 4 的 Tests asmdef references 列表缺少 `MessagePipe.VContainer`,但 `EventBusTests.cs`(Task 6 Step 1)直接调用 `builder.RegisterMessagePipe()`——该扩展方法定义在 `MessagePipe.VContainer` 程序集中,导致编译错误 CS1061("'ContainerBuilder' does not contain a definition for 'RegisterMessagePipe'")。
+   - 修复:在 Tests asmdef references 中追加 `"MessagePipe.VContainer"`(与 Core/Boot asmdef 一致)。
+   - 性质:仅构建依赖图修正,未改动任何接口契约、测试代码或实现代码。修复后编译 0 error,全量 22 用例全 PASS。
+
+其余无偏差:EventBus 的 `RegisterMessagePipe()` 开放泛型注册按计划主路径工作,未触发 Task 6 / Task 8 的回退方案;VContainer `UseEntryPoints` 链式 API 按计划写法编译通过;Boot 场景 Play 模式无报错、无 BootFailedException。
