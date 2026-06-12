@@ -1,7 +1,10 @@
 using System.Collections.Generic;
 using EasyFramework.Core.Boot;
 using EasyFramework.Core.Timing;
+using EasyFramework.Services.Audio;
 using EasyFramework.Services.Configs;
+using EasyFramework.Services.Inputs;
+using EasyFramework.Services.Localization;
 using EasyFramework.Services.Saves;
 using UnityEngine;
 using VContainer;
@@ -15,8 +18,14 @@ namespace EasyFramework
         [Header("本地配置表(可空)")]
         [SerializeField] List<ConfigTable> _configTables = new();
 
+        [Header("本地化表(可空)")]
+        [SerializeField] List<LocalizationTable> _localizationTables = new();
+
         [Header("初始场景名")]
         [SerializeField] string _initialScene = "Boot";
+
+        [Header("默认语言")]
+        [SerializeField] string _defaultLocale = "zh-CN";
 
         protected override void Configure(IContainerBuilder builder)
         {
@@ -26,12 +35,19 @@ namespace EasyFramework
                 ConfigTables = _configTables,
                 SaveProfile = null,
                 InitialScene = _initialScene,
+                LocalizationTables = _localizationTables,
+                DefaultLocale = _defaultLocale,
             };
 
             FrameworkInstaller.Install(builder, options);
 
             builder.RegisterEntryPoint<GameBootstrap>();
-            builder.UseEntryPoints(ep => ep.Add<TimerTicker>());
+            builder.UseEntryPoints(ep =>
+            {
+                ep.Add<TimerTicker>();
+                ep.Add<AudioTicker>();
+                ep.Add<InputTicker>();
+            });
 
             // SaveOnPauseListener 挂到本组合根 GameObject,build 后绑定 ISaveService。
             var pauseListener = gameObject.AddComponent<SaveOnPauseListener>();
@@ -50,5 +66,21 @@ namespace EasyFramework
         readonly TimerService _timer;
         public TimerTicker(TimerService timer) => _timer = timer;
         public void Tick() => _timer.Tick();
+    }
+
+    /// <summary>把 AudioService.Tick(BGM 淡变推进)桥接到 Tick 循环。</summary>
+    sealed class AudioTicker : ITickable
+    {
+        readonly AudioService _audio;
+        public AudioTicker(AudioService audio) => _audio = audio;
+        public void Tick() => _audio.Tick();
+    }
+
+    /// <summary>把 InputService.Tick(读输入、喂手势)桥接到 Tick 循环。</summary>
+    sealed class InputTicker : ITickable
+    {
+        readonly InputService _input;
+        public InputTicker(InputService input) => _input = input;
+        public void Tick() => _input.Tick();
     }
 }

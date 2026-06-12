@@ -9,7 +9,7 @@
     "MessagePipe",
     "Unity.Addressables",
     "Unity.ResourceManager",
-    "PrimeTween",
+    "PrimeTween.Runtime",
     "Unity.Cinemachine",
     "Unity.InputSystem",
     "Unity.TextMeshPro"
