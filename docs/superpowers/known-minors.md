@@ -32,3 +32,7 @@
 - TapRushFlow.GameplayState.Update 有重复的结束判定(示范代码可再精简)
 - PerfOverlay.OnGUI 每帧插值字符串分配(性能角标自身产生少量 GC,仅 DEV 构建)
 - CheatRegistry.GetTypes() 未兜底 ReflectionTypeLoadException
+
+## UPM 打包阶段
+- UnityIAPProvider 使用 Unity IAP v4 API(IDetailedStoreListener/IStoreController),IAP v5 已弃用(CS0618 警告,非错误)。功能正常,后续可升级到 IAP v5 新 API。
+- 空工程 CLI 验收(2026-06-13):全新 Unity 6000.3 工程 + OpenUPM registry + file: 引用本包 → 依赖树全解析、0 编译错误,确认 package.json 依赖声明完整正确。
