@@ -1,0 +1,21 @@
+{
+  "name": "EasyFramework.Template",
+  "rootNamespace": "EasyFramework.Template",
+  "references": [
+    "EasyFramework.Core",
+    "EasyFramework.Services",
+    "EasyFramework.Monetization",
+    "EasyFramework.Boot",
+    "EasyFramework.DevTools",
+    "UniTask",
+    "VContainer",
+    "MessagePipe"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "noEngineReferences": false
+}
