@@ -37,7 +37,7 @@ namespace EasyFramework
             {
                 SaveDirectory = Application.persistentDataPath,
                 ConfigTables = _configTables,
-                SaveProfile = null,
+                SaveProfile = GetSaveProfile(),
                 InitialScene = _initialScene,
                 LocalizationTables = _localizationTables,
                 DefaultLocale = _defaultLocale,
@@ -63,6 +63,13 @@ namespace EasyFramework
                 G.Initialize(r);
             });
         }
+
+        /// <summary>
+        /// 子类可覆盖以提供游戏自定义存档 profile(决定 G.Save.Data&lt;T&gt;() 的载荷类型)。
+        /// 默认返回 null,框架用 DefaultSaveData。SaveProfile 是普通 C# 类(非 ScriptableObject),
+        /// 故经此代码 seam 注入,而非 Inspector 字段。
+        /// </summary>
+        protected virtual SaveProfile GetSaveProfile() => null;
     }
 
     /// <summary>把 TimerService.Tick() 桥接到 VContainer 的 PlayerLoop Tick 循环。</summary>

@@ -1,1 +1,3 @@
-// Placeholder: populated in later phases.
+using System.Runtime.CompilerServices;
+
+[assembly: InternalsVisibleTo("EasyFramework.Tests.EditMode")]
