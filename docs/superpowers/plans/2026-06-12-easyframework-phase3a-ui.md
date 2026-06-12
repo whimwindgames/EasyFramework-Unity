@@ -1199,3 +1199,29 @@ namespace EasyFramework
 6. **`asmdef`/包依赖与 Phase 3b 的边界** —— 任务书要求本计划不改 asmdef、PrimeTween/TMP 引用由 Phase 3b Task 1 统一升级。修正:在「前置要求 1」明确声明依赖关系与执行顺序;`FadeSceneTransition`(唯一用 PrimeTween 的文件)给临时降级路径,使 Task 1-5、7 可在 Phase 3b 未就绪时先行验证。
 7. **`FadeSceneTransition` 替换 `NoopSceneTransition` 的接线点** —— 修正:Task 7 Step 3 明确把 `FrameworkInstaller` Scene 块的 `ISceneTransition` 注册从 `NoopSceneTransition` 改为 `FadeSceneTransition`,并提示若实际 Phase 2 文件写法不同只换具体类型;黑幕用独立 `sortingOrder = short.MaxValue` 的 Canvas,保证盖在 UIRoot Overlay 之上。
 8. **Window Push 是否隐藏下层未定** —— 任务书要求"你定一个默认并说明"。修正:默认 Push 时把下层栈顶 `SetActive(false)`(全屏遮挡省 overdraw + 避免下层误接收输入),Pop 时把新栈顶 `SetActive(true)` 并重新 `PlayEnter`;在「关键设计决策」与代码注释中说明,测试 `Push_HidesPreviousTop`/`Pop_RemovesTop_AndReactivatesPrevious` 覆盖。
+
+---
+
+## Deviations (Task 8 验证代理记录 / 2026-06-12)
+
+验证代理在编译 + EditMode 全量测试阶段发现并修复以下偏差。公共接口契约(`IUIService`/`ISceneTransition`/`UIPanel`/`UIPopup<TResult>`)均未改动,仅修运行/测试可行性问题。
+
+1. **`FadeSceneTransition` 的 DI 注册无法解析 `System.Single`(编译通过但测试运行期抛异常)。**
+   - 现象:`FrameworkInstallerTests.*` 5 个用例报 `VContainerException : Failed to resolve FadeSceneTransition : No such registration of type: System.Single`。
+   - 根因:计划用 `builder.Register<ISceneTransition, FadeSceneTransition>(...)`,但 `FadeSceneTransition` 构造为 `FadeSceneTransition(float duration = 0.25f)`;VContainer **不识别 C# 可选参数默认值**,会尝试从容器解析未注册的 `System.Single` 而失败(计划注释「用无参/默认参构造」的假设对 VContainer 不成立)。
+   - 修复:`Boot/FrameworkInstaller.cs` 改为工厂 lambda 注册 `builder.Register<ISceneTransition>(_ => new FadeSceneTransition(), Lifetime.Singleton);`,由 C# 直接走默认时长 `0.25f`。运行时行为与意图一致(子作用域仍可覆盖自定义时长)。
+
+2. **`UIServiceTests` 大量用例在 EditMode 抛 `DontDestroyOnLoad can only be used in play mode`。**
+   - 现象:14 个 `UIServiceTests` 中约 11 个报上述 `InvalidOperationException`,源自 `[UIRoot]` / `[EventSystem]` 构建。
+   - 根因:`UIRootBuilder.Build()` 硬调 `Object.DontDestroyOnLoad`,在 EditMode 测试(非 Play 模式)非法。计划只为 `Object.Destroy` 留了 `DestroyHandler` 测试缝,未为 `DontDestroyOnLoad` 留对称缝;计划风险 #1 只覆盖「构造不碰 GameObject」,未覆盖 `Push/Show` 触发的懒构建路径。
+   - 修复:`Services/UI/UIRootBuilder.cs` 新增对称测试缝 `internal static Action<GameObject> DontDestroyHandler = Object.DontDestroyOnLoad;`,两处 `DontDestroyOnLoad` 改走该钩子。测试 `[SetUp]` 将其替换为 no-op、`[TearDown]` 还原(与既有 `DestroyHandler` 模式一致)。运行时行为不变。
+
+3. **`Popup_SecondQueuesUntilFirstResolves` 计数把伪 prefab 模板算进活跃实例。**
+   - 现象:`CountActivePopupInstances()` 期望 1、实得 2。
+   - 根因:计划的 `MakePrefab<T>()` 创建的伪 prefab 模板本身是场景中一个**活跃**的 `ConfirmPopup` GameObject;`InstantiatePanelAsync` 实例化后,`FindObjectsByType<ConfirmPopup>` 同时命中「模板 + 实例」= 2。计划的 `CountActivePopupInstances` 名为「Active」却未按 `activeInHierarchy` 过滤,且 `MakePrefab` 未停用模板——属计划测试代码的潜在缺陷。
+   - 修复(三处,贴近真实 prefab 语义):
+     - 测试 `MakePrefab<T>()`:模板 `go.SetActive(false)`(真实 Addressable prefab 不是活跃场景对象);
+     - 测试 `CountActivePopupInstances()`:按 `gameObject.activeInHierarchy` 过滤后计数;
+     - 生产 `UIService.InstantiatePanelAsync`:实例化后 `go.SetActive(true)`,确保从非激活模板克隆出的面板可见(Window 的 `Push_HidesPreviousTop`/`Pop_*` 仍依赖实例默认激活,故此为行为正确的必要补充)。
+
+**验证结果:** 编译 0 错误;EditMode 109/109 通过(含 Addressables doc-stub 1 个,EasyFramework 自有 108 个全绿)。
