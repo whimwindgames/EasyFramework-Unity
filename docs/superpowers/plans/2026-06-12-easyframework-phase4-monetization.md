@@ -1823,3 +1823,15 @@ using EasyFramework.Monetization.IAP;
 8. **真实 SDK 接入槽易被误当占位符删掉** —— 修正:`AdMobAdsProvider`/`FirebaseAnalyticsBackend` 用 `#if EF_ADMOB`/`#if EF_FIREBASE` 包住,文件头大段注释明确「NOT a placeholder」+ 四步接入流程 + 锁定签名不变,默认 define 未定义故不参与编译、不污染 0-error 验证。
 9. **`UnityIAPProvider` 与框架 `ProductType` 同名冲突** —— 修正:`UnityEngine.Purchasing.ProductType` 与 `EasyFramework.Monetization.IAP.ProductType` 同名不同命名空间,`UnityIAPProvider` 内用全限定名 `UnityEngine.Purchasing.ProductType.Consumable` 区分,避免 `using` 二义。
 10. **多后端注册需让 `IAnalyticsService` 拿到全部 backend** —— 修正:`FrameworkInstaller` 以工厂 lambda 经 `c.Resolve<IReadOnlyList<IAnalyticsBackend>>()` 收集所有 `Register<IAnalyticsBackend, ...>` 多注册项;接 Firebase 时 `GameLifetimeScope` 再 `Register` 一个 `IAnalyticsBackend` 即并入广播,业务零改动。验证代理若发现该 VContainer 版本多注册解析 API 不同,按实际等效调整(目标:`AnalyticsService` 构造拿到含 Debug + 后续追加后端的列表)。
+
+---
+
+## Deviations
+
+验证代理(Task 6)执行记录与偏差:
+
+1. **`AdsService` DI 注册改为工厂 lambda(必要修复)** —— `FrameworkInstaller` 原以 `builder.Register<AdsService>(Lifetime.Singleton).As<IAdsService>().AsSelf()` 注册。VContainer 自动选「参数最多」的构造,选中了 `AdsService` 的 `internal` 测试构造 `(IAdsProvider, IConfigService, IAnalyticsService, Func<float>)`,去解析未注册的 `System.Func<float>` 而抛 `VContainerException: No such registration of type: System.Func`1[System.Single]`,导致 `FrameworkInstallerTests` 全部 6 个用例失败(`Install_ResolvesMonetizationServices`/`GFacade_BindsMonetizationServices`/`GFacade_Binds{Phase2,Phase3b,UI}Services`/`GFacade_ResetClearsBindings`)。修复:改用工厂 lambda 显式调 3 参公开生产构造 `new AdsService(c.Resolve<IAdsProvider>(), c.Resolve<IConfigService>(), c.Resolve<IAnalyticsService>())`(`Func<float>` 走默认 `Time.realtimeSinceStartup`)。此为本文件 Phase 3a 已有同因模式(`ISceneTransition`/`SceneService` 因 VContainer 不识别可选参数默认值改工厂 lambda)的一致延伸。**`IAdsService`/`AdsService` 公共接口契约不变**,仅改注册写法。修复后 132 个 EditMode 用例全绿。
+
+2. **Unity IAP 程序集名核对结果 = `Unity.Purchasing`** —— `unity_reflect` 核对 `UnityEngine.Purchasing.IDetailedStoreListener` 落在程序集 `Unity.Purchasing`,与 `EasyFramework.Monetization.asmdef` 计划书写的 `Unity.Purchasing` 引用一致,无需调整。`UnityIAPProvider` 真机路径编译 0 error,`#if EF_ADMOB`/`#if EF_FIREBASE` 接入槽默认未定义符号不参与编译。
+
+**验证结果:** 编译 0 error;EditMode 132/132 全绿(Phase 1-3 既有 109 + Phase 4 新增 23:AdsService 7 / IAPService 7 / AnalyticsService 7 / FrameworkInstaller +2)。框架相关 warning 均为被测负路径主动 `Debug.LogWarning`(Analytics 异常隔离、IAP 发奖入 pending 等),非缺陷。PlayerPrefs `ef.iap.owned`/`ef.iap.pending` 运行后均不残留。

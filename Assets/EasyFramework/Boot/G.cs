@@ -1,5 +1,8 @@
 using EasyFramework.Core.Events;
 using EasyFramework.Core.Timing;
+using EasyFramework.Monetization.Ads;
+using EasyFramework.Monetization.Analytics;
+using EasyFramework.Monetization.IAP;
 using EasyFramework.Services.Assets;
 using EasyFramework.Services.Audio;
 using EasyFramework.Services.Cameras;
@@ -38,6 +41,11 @@ namespace EasyFramework
         public static ILocalizationService Loc { get; private set; }
         public static IHapticsService Haptics { get; private set; }
 
+        // Phase 4 商业化层
+        public static IAdsService Ads { get; private set; }
+        public static IIAPService IAP { get; private set; }
+        public static IAnalyticsService Analytics { get; private set; }
+
         public static bool IsInitialized { get; private set; }
 
         internal static void Initialize(IObjectResolver resolver)
@@ -58,6 +66,11 @@ namespace EasyFramework
             Juice = resolver.Resolve<IJuiceService>();
             Loc = resolver.Resolve<ILocalizationService>();
             Haptics = resolver.Resolve<IHapticsService>();
+
+            // Phase 4 商业化层
+            Ads = resolver.Resolve<IAdsService>();
+            IAP = resolver.Resolve<IIAPService>();
+            Analytics = resolver.Resolve<IAnalyticsService>();
 
             // 填充 Services 层本地化运行时访问点,供 LocalizedText 读取(避免 Services → Boot 循环依赖)。
             LocalizationRuntime.Initialize(Loc, Events);
@@ -83,6 +96,11 @@ namespace EasyFramework
             Juice = null;
             Loc = null;
             Haptics = null;
+
+            // Phase 4 商业化层
+            Ads = null;
+            IAP = null;
+            Analytics = null;
 
             LocalizationRuntime.Reset();
 

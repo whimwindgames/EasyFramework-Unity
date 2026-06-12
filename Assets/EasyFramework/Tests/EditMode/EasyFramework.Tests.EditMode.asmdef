@@ -4,6 +4,7 @@
   "references": [
     "EasyFramework.Core",
     "EasyFramework.Services",
+    "EasyFramework.Monetization",
     "EasyFramework.Boot",
     "UniTask",
     "VContainer",

@@ -1,6 +1,9 @@
 using System.Collections.Generic;
 using EasyFramework.Core.Events;
 using EasyFramework.Core.Timing;
+using EasyFramework.Monetization.Ads;
+using EasyFramework.Monetization.Analytics;
+using EasyFramework.Monetization.IAP;
 using EasyFramework.Services.Assets;
 using EasyFramework.Services.Audio;
 using EasyFramework.Services.Cameras;
@@ -57,6 +60,7 @@ namespace EasyFramework.Tests
                 SaveProfile = null, // 用默认 DefaultSaveData profile
                 LocalizationTables = new List<LocalizationTable>(),
                 DefaultLocale = "zh-CN",
+                ProductCatalog = ScriptableObject.CreateInstance<ProductCatalog>(),
             };
 
         IObjectResolver Build()
@@ -155,6 +159,28 @@ namespace EasyFramework.Tests
             Assert.IsNull(EasyFramework.G.Audio);
             Assert.IsNull(EasyFramework.G.Loc);
             Assert.IsNull(EasyFramework.G.Haptics);
+            Assert.IsNull(EasyFramework.G.Ads);
+            Assert.IsNull(EasyFramework.G.IAP);
+            Assert.IsNull(EasyFramework.G.Analytics);
+        }
+
+        [Test]
+        public void Install_ResolvesMonetizationServices()
+        {
+            var c = Build();
+            Assert.NotNull(c.Resolve<IAdsService>());
+            Assert.NotNull(c.Resolve<IIAPService>());
+            Assert.NotNull(c.Resolve<IAnalyticsService>());
+        }
+
+        [Test]
+        public void GFacade_BindsMonetizationServices()
+        {
+            var c = Build();
+            EasyFramework.G.Initialize(c);
+            Assert.AreSame(c.Resolve<IAdsService>(), EasyFramework.G.Ads);
+            Assert.AreSame(c.Resolve<IIAPService>(), EasyFramework.G.IAP);
+            Assert.AreSame(c.Resolve<IAnalyticsService>(), EasyFramework.G.Analytics);
         }
     }
 }

@@ -22,3 +22,7 @@
 - CinemachineCameraService.Shake 的 duration 参数被丢弃(由 Impulse 包络承载)
 - LocalizedText OnEnable 早于 Localization 初始化时有竞态(已有 IsInitialized 守卫,首帧文本延迟)
 - JuiceService.HitStopAsync 用 0.01s timer 轮询重排恢复(可改精确重排)
+
+## Phase 4
+- IAPService pending 队列以 productId 去重,同商品多次 Consumable 掉单只补一次
+- UnityIAPProvider 商店回调线程/时序假设未做主线程切换兜底(真机接入时验证)
