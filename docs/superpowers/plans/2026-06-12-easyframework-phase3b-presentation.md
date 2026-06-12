@@ -2570,3 +2570,27 @@ namespace EasyFramework
 8. **`FrameworkInstallerTests.Build()` 会构造 Audio/Loc/Haptics 服务,它们在构造时读 PlayerPrefs,跨用例污染** —— 修正:给 `FrameworkInstallerTests` 加 `[SetUp]`/`[TearDown]` 清四键(`ef.audio.bgm`/`ef.audio.sfx`/`ef.locale`/`ef.haptics`),与各服务自己的 fixture 一致。
 9. **`PinchDetector` 首帧无基线就算 DeltaScale 会除零/发噪声事件** —— 修正:首帧(或 `Reset` 后首帧)只记录基线、不发事件;`_lastDistance <= Epsilon` 时也只重置基线,避免除零。`Reset()` 在松指/单指时调用(`InputService.FeedPinch` 双指不足时 `Reset`)。
 10. **Camera/Juice 视觉层 API 名可能与 Cinemachine 3.x / PrimeTween 实际不符,机械写死会编译失败** —— 修正:偏差 2 声明「API 名以实际为准」,Task 9 Step 2 用 `unity_reflect` 核对五组类型成员;接口契约 `ICameraService`/`IJuiceService` 不变,实现细节可等效调整,不算占位符。
+
+---
+
+## Deviations (Task 9 验证代理记录 / 2026-06-12)
+
+验证代理在编译 + EditMode 全量测试阶段发现并修复以下偏差。公共接口契约(`ICameraService`/`IJuiceService`/`ILocalizationService`/`IAudioService`/`IInputService`/`IHapticsService`)均未改动。
+
+1. **包解析:Cinemachine 3.1.7 首次未下载到 PackageCache,导致 `Unity.Cinemachine` 命名空间不存在。**
+   - 现象:`CinemachineCameraService.cs` 报 `CS0234 'Cinemachine' does not exist in 'Unity'` 等。
+   - 根因:`manifest.json`/`packages-lock.json` 已含 `com.unity.cinemachine@3.1.7`,但其包体未落地到 `Library/PackageCache`(仅依赖 `com.unity.splines` 落地),属环境网络解析中断(任务书已声明此类为网络噪音)。
+   - 修复:`manage_packages(action=resolve_packages)` 触发重解析,Cinemachine 成功下载(`com.unity.cinemachine@f3f96bcb59af`)。**非代码问题。** 核对:运行时程序集名 `Unity.Cinemachine`,与 asmdef 引用一致。
+   - 安装版本确认:PrimeTween **1.3.3**(OpenUPM)、Cinemachine **3.1.7**、Input System 1.19.0。
+
+2. **asmdef 对 PrimeTween 的程序集引用名写错(`PrimeTween` → 应为 `PrimeTween.Runtime`)。**
+   - 现象:`JuiceService.cs`/`FadeSceneTransition.cs` 报 `CS0246 PrimeTween could not be found`,尽管包已在 cache。
+   - 根因:PrimeTween 1.3.3 的运行时程序集名为 **`PrimeTween.Runtime`**(命名空间仍是 `PrimeTween`);上一轮 asmdef 升级误用了 `"PrimeTween"` 作为引用名,Unity 按程序集名精确匹配失败。
+   - 修复:`EasyFramework.Services.asmdef` 与 `EasyFramework.Tests.EditMode.asmdef` 的 references 由 `"PrimeTween"` 改为 `"PrimeTween.Runtime"`。Cinemachine/InputSystem/TMP 引用名核对无误,未改。
+
+3. **`LocalizedText`(Services 程序集)引用 Boot 层 `G` 门面 → 程序集循环依赖,无法编译。**
+   - 现象:`LocalizedText.cs` 报 `CS0103 The name 'G' does not exist in the current context`。
+   - 根因:计划(及偏差 7 的注释)让 `LocalizedText` 走 `G.Loc`/`G.Events` 门面,但 `G` 在 `EasyFramework.Boot` 程序集,而 `LocalizedText` 落在 `EasyFramework.Services`。`Boot` 已 references `Services`,故 `Services → Boot` 会形成**循环程序集依赖**,Unity 不允许。计划「`LocalizedText` 是 Game 层组件可走门面」的设想与其物理所属程序集冲突——属计划的分层契约疏漏。
+   - 修复(契约不变):新增 Services 层静态访问点 `Services/Localization/LocalizationRuntime.cs`(持 `ILocalizationService`/`IEventBus`,`Initialize`/`Reset`/`IsInitialized`),由 Boot 的 `G.Initialize`/`G.Reset` 填充/清空;`LocalizedText` 改读 `LocalizationRuntime` 而非 `G`。`LocalizedText` 公共 API(`SetKey`)、`OnEnable/OnDisable` 配对订阅、冷启动守卫语义全部保持。Game 层仍可走 `G.Loc`/`G.Events`。
+
+**验证结果:** 编译 0 错误;EditMode 109/109 通过(含 Addressables doc-stub 1 个,EasyFramework 自有 108 个全绿);本地化缺失告警已由 `TableLocalizationServiceTests` 的 `LogAssert.Expect(Warning, ".*missing.*")` 收口。

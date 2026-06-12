@@ -11,6 +11,10 @@
     "MessagePipe.VContainer",
     "Unity.Addressables",
     "Unity.ResourceManager",
+    "PrimeTween.Runtime",
+    "Unity.Cinemachine",
+    "Unity.InputSystem",
+    "Unity.TextMeshPro",
     "UnityEngine.TestRunner",
     "UnityEditor.TestRunner"
   ],
