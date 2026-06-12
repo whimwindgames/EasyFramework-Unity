@@ -1,0 +1,13 @@
+{
+  "name": "Game.Editor",
+  "rootNamespace": "Game.Editor",
+  "references": [
+    "Game",
+    "EasyFramework.Services",
+    "Unity.Addressables",
+    "Unity.Addressables.Editor",
+    "Unity.ResourceManager",
+    "Unity.TextMeshPro"
+  ],
+  "includePlatforms": ["Editor"]
+}
