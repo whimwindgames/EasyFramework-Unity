@@ -2173,3 +2173,38 @@ EasyFramework.DevTools = [Cheat] 作弊 + FPS 角标 + 调试控制台
 6. **Editor 脚本归属** —— `TapRushAssetSetup` 用 `UnityEditor`/`AddressableAssetSettings`,必须 Editor-only。修正:选定「放 `Assets/Game/Editor/` + 独立 `Game.Editor.asmdef`(`includePlatforms: ["Editor"]`)」方案(Task 5 Step 8),不污染运行时 `Game` 程序集;Addressables Editor 程序集名以 unity_reflect 核对。
 7. **不改框架 Boot 接线文件** —— DevTools/TapRush 若改 `FrameworkInstaller`/`RootLifetimeScope`/`G.cs` 会与 Phase 1-4 接线冲突。修正:§执行基线 2 锁定「Phase 5 不改 Boot 三件套」,DevTools BootTask 经各游戏 `GameLifetimeScope` 的 `IBootTask` 收集机制注册,`DevToolsBootTask` 用 `FindFirstObjectByType<RootLifetimeScope>` 拿宿主节点(找不到自建 `[DevTools]` 兜底),不触组合根。
 8. **DevToolsBootTask 扫描全部程序集性能** —— `AppDomain.CurrentDomain.GetAssemblies()` 全扫会慢且可能扫到系统程序集异常。修正:Task 3 按名字前缀(`Game`/`EasyFramework`)过滤只扫业务/框架程序集,`try/catch` 包裹非关键失败只 LogWarning。
+
+---
+
+## Deviations(Task 7 验证代理实测记录)
+
+验证代理执行 Task 7 全量验收时,以磁盘实际为准做了以下等效调整;均不改公共契约,记录如下:
+
+1. **DevTools asmdef 追加 `EasyFramework.Boot` 引用。** 计划 Task 1 Step 3 的 DevTools references 未含 `EasyFramework.Boot`,但 `DevToolsBootTask.ResolveHost()` 引用了 `EasyFramework.RootLifetimeScope`(位于 Boot 程序集),编译报 CS0234。已在 `EasyFramework.DevTools.asmdef` 追加 `"EasyFramework.Boot"`。无环依赖(Boot 不引用 DevTools)。纯构建依赖修正。
+
+2. **Game UI 面板重写修饰符 `protected internal override` → `protected override`。** 磁盘 `UIPanel`/`UIPopup<T>` 的钩子(`OnSetup`/`PlayEnter`/`OnBackRequested`)实为 `protected internal virtual`;跨程序集(Game 派生 Services 基类)重写时 C# 不允许保留 `internal` 可见性(CS0507)。`MenuWindow`/`GameHud`/`ResultWindow`/`ConfirmPopup` 四个面板改为 `protected override`。即自查问题 5 的实际落地路径,契约不变。
+
+3. **Game 用 `G` 门面的源文件补 `using EasyFramework;`。** `G` 在命名空间 `EasyFramework`(Boot 程序集)。`TapRushFlow.cs`/`TapRushCheats.cs` 缺该 using 导致 CS0103。已补。纯 using 修正。
+
+4. **生产 SaveProfile 替换机制:`RootLifetimeScope` 加 `protected virtual SaveProfile GetSaveProfile() => null` seam + `TapRushRootLifetimeScope` 子类覆盖。** 自查问题 4 的三条候选路径实测均不可行:`SaveProfile` 是普通 C# 类(非 ScriptableObject,无 Inspector 字段);`FrameworkInstaller.Install` 把 `profile` 直接闭包进 `ISaveService` 工厂(子作用域 `RegisterInstance<SaveProfile>` 不能覆盖);且 `G.Save` 在 `G.Initialize(r)` 时一次性绑定根容器的 `ISaveService`(子作用域覆盖对 `G.Save` 无效)。**最小侵入解**:给 `RootLifetimeScope.Configure` 的 `options.SaveProfile = GetSaveProfile()`(原为硬编码 `null`),新增 `protected virtual SaveProfile GetSaveProfile() => null`(默认行为不变);新增 `Assets/Game/TapRushRootLifetimeScope.cs : RootLifetimeScope` 覆盖该 seam 返回 TapRush profile。Boot 场景的 `[EasyFramework]` 组件由 `RootLifetimeScope` 换为 `TapRushRootLifetimeScope`。**此为对 Boot 三件套之一(RootLifetimeScope)的最小化偏差**——仅增一个默认 no-op 的可覆盖 seam,不改任何既有行为/公共签名;§执行基线 2 的"不改 Boot 文件"在此让步,因框架原本无任何途径让游戏替换生产存档载荷(设计缺口)。实测 `G.Save.Data<TapRushSaveData>()` 成功、跨会话读回正确。
+
+5. **`TapRushGameLifetimeScope` 按计划 Task 5 Step 6 重写(磁盘原为空 stub)。** 磁盘实现代理留下的 `TapRushGameLifetimeScope` 仅为空 `LifetimeScope` 占位(未继承 `GameLifetimeScope`、无任何注册)。验证代理按计划契约重写为 `: GameLifetimeScope`,注册 `TapRushFlow`、`TapRushFlowBootTask`、`DevToolsBootTask`、IAP RewardHandler。SaveProfile 注册移到 4 的 root 子类(子作用域注册对 `G.Save` 无效)。
+
+6. **`TapRushFlowBootTask` 单次注册修正 + 子作用域 BootTask 自驱动改 `IInitializable`。** 计划 Task 5 Step 6 的 `Register<...>().As<IBootTask>().AsSelf()` + 另行 `RegisterEntryPoint<...>()` 会对同一具体类型重复注册,触发 VContainer "Conflict implementation type"。改为单次 `RegisterEntryPoint<TapRushFlowBootTask>()`(其内部 `AsImplementedInterfaces()` 一并暴露 `IBootTask`/`ITickable`/`IDisposable`)。**更关键**:框架 `GameBootstrap`(根作用域入口点)只注入根容器的 `IEnumerable<IBootTask>`,**看不到子作用域 `[TapRush]` 注册的 `IBootTask`**——故子作用域玩法/DevTools BootTask 的 `InitializeAsync` 永不被调用(自查问题 7 假定的"GameBootstrap 自动收集子作用域 BootTask"在 VContainer 父子作用域模型下不成立)。修正:`TapRushFlowBootTask` 与 `DevToolsBootTask` 各实现 `VContainer.Unity.IInitializable`(`Initialize()` 内做原 `InitializeAsync` 的逻辑),经子作用域入口点 dispatcher 自驱动;`DevToolsBootTask` 注册也改为 `RegisterEntryPoint`。`DevToolsBootTask` 因此对 DevTools 程序集做了 `IInitializable` 增量(签名/契约不变,仅多实现一个入口点接口)。
+
+7. **子作用域 `[TapRush]` 需显式 `parentReference`。** VContainer 不按 GameObject 层级自动 parent 子 `LifetimeScope`;`[TapRush]`(`[EasyFramework]` 的子物体)若无 parentReference 则建为独立作用域,解析 `IEventBus` 等根服务失败。验证代理在 Boot 场景给 `[TapRush]` 的 `LifetimeScope.parentReference.TypeName` 设为 `EasyFramework.RootLifetimeScope`(`Find` 按可赋值类型匹配到 `TapRushRootLifetimeScope`)。场景接线细节。
+
+8. **`TapRushFlow.GameplayState.Update` 加 `_hud` 空守卫(修一处 NRE)。** `_hud` 在 `Enter()` 的 `await G.UI.ShowHudAsync<GameHud>()` 之后才赋值;异步 Enter 完成前若 `Update` 先 tick 一帧,`f._hud.SetTime(...)`(计划原第 84 行)抛 NRE(被 VContainer 入口点异常处理器捕获并 LogException,不致命但污染控制台)。改 `Update` 首行守卫 `f._hud == null` 提前返回,并把 `IsOver→ToResult` 检查上提(顺带修复"`IsOver` 在 Update 外被置真时早返回导致永不进 Result"的边角)。最小防御性修正,玩法语义不变。
+
+**PlayMode 验收结果(全绿):**
+- Boot 完成:`G.IsInitialized==True`,根 + 子作用域 Container 均 built,控制台 0 error。
+- GameFlow:`BootCompletedEvent` 后自动进 Menu(MenuWindow 显示);START→Gameplay(GameHud 显示、圆圈经 `G.Pool`+Addressables 真实生成 ~34/38 个)→ 命中加分(Score 实时刷新、`G.Audio.PlaySfx`、`G.Pool.Despawn`)→ 倒计时归零自然进 Result(ResultWindow 显示 Score/Best、`G.Save.Save()` 写最高分、`G.Analytics.Track`)。
+- DevTools:`PerfOverlay` 挂载;`CheatRegistry` 注册 5 条命令(含 TapRush `tap_reset_highscore`/`tap_set_highscore`)。
+- Addressables 真实加载冒烟:`ui/MenuWindow`/`ui/GameHud`/`ui/ResultWindow`/`ui/ConfirmPopup`/`circle`/`audio/tap` 六个 key 全部 `Succeeded`(编辑器 AssetDatabase play 模式)。
+- HighScore 读回:本局写 10 → stop → 再 Play → `G.Save.Data<TapRushSaveData>().HighScore==10`(跨会话持久化正确)。
+- 完整一轮干净运行(Menu→Gameplay→Result + 存档)控制台 **0 error**。
+
+**已知次要事项(不阻塞):**
+- `audio/tap` 程序化 clip 的 `AudioClip.length` 读为 0(in-memory procedural clip 存 `.asset` 后长度元数据未序列化);`PlaySfx` 不报错,实际音可能极短/静音。不影响框架链路验收(计划已注明音效为程序化生成,可回退 `.wav`)。
+- `CheatRegistry` 在编辑器下会把已加载的 `EasyFramework.Tests.EditMode` 测试程序集里的示例 `[Cheat]`(noarg_cmd/int_cmd/mixed_cmd)也注册进来(DevToolsBootTask 扫描 `EasyFramework*` 前缀程序集);仅编辑器现象,发布构建无测试程序集,无影响。
+- IngameDebugConsole prefab 不在 `Resources/`,`DevToolsBootTask.EnsureDebugConsole` 按设计 LogWarning 跳过(非关键);控制台实例化需用户手动把包内 prefab 复制到 `Assets/Resources/IngameDebugConsole.prefab`(已在代码注释说明)。

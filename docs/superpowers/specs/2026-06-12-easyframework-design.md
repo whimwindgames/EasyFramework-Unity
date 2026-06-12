@@ -266,3 +266,29 @@ v1 明确不做,但留好接口:
 3. **Phase 3 表现层**:UI、Audio、Input、Camera、Tween/Juice、Localization、Vibration
 4. **Phase 4 商业化**:Ads、IAP、Analytics、RemoteConfig 对接
 5. **Phase 5 开发体验**:DevTools、_Template、示例小游戏验收(用框架做一个最小完整游戏)
+
+## 11. 实现偏差摘要(各 Phase 累计)
+
+本节汇总实现阶段相对本设计规格 / 各 Phase 计划的累计偏差,逐条注明 Phase、偏差内容、理由与影响。
+所有偏差均为构建依赖修正、第三方 API/版本对齐、或测试可行性补缝,**未改动任何公共接口契约**(`G.*` 门面、各服务接口、`FrameworkInstaller`/`FrameworkOptions`、`IBootTask`、`StateMachine`/`State`、`UIPanel`/`UIPopup` 等签名一律不变)。
+详细记录见各 Phase 计划文档末尾的 "Deviations" 小节,评审遗留的 minor 问题清单见 `docs/superpowers/known-minors.md`。
+
+| Phase | 偏差 | 理由 / 影响 |
+|---|---|---|
+| Phase 1 | Tests asmdef 追加 `MessagePipe.VContainer` 引用(`EventBusTests` 调 `builder.RegisterMessagePipe()`,扩展方法所在程序集未引用导致 CS1061)。 | 仅构建依赖图修正;契约/测试/实现代码均未改,修复后 22 用例全绿。 |
+| Phase 2 | (1) `Services.asmdef` 因 `overrideReferences: true` 关闭自动引用,追加 `UniTask.Addressables`(否则 `ToUniTask<T>()` 泛型重载不可见,`AddressablesAssetService` 拿到 void)。(2) `Tests.EditMode.asmdef` 同因追加 `MessagePipe.VContainer`。 | 两处均为第三方 API 接线层的 asmdef 引用修正;接口契约 / 实现逻辑 / 测试代码未动,源码未改,计划预留回退未采用。EditMode 48/48(框架自有)全绿。 |
+| Phase 3a (UI) | (1) `FadeSceneTransition` 改工厂 lambda 注册(VContainer 不识别 C# 可选参数默认值,会去解析未注册的 `System.Single`)。(2) `UIRootBuilder` 新增 `DontDestroyHandler` 测试缝(`DontDestroyOnLoad` 在 EditMode 非法)。(3) Popup 计数测试按 `activeInHierarchy` 过滤、伪 prefab 模板 `SetActive(false)`、实例化后 `SetActive(true)`,贴近真实 prefab 语义。 | 均为 DI 注册写法 / EditMode 运行可行性补缝,`IUIService`/`ISceneTransition`/`UIPanel`/`UIPopup` 契约不变。EditMode 109/109 全绿。 |
+| Phase 3b (表现层) | (1) Cinemachine 3.1.7 首次未落地 PackageCache,经 `resolve_packages` 重解析(非代码问题)。(2) PrimeTween 运行时程序集名是 `PrimeTween.Runtime`(非 `PrimeTween`),asmdef 引用名改正。(3) `LocalizedText` 不能直接引用 Boot 层 `G`(会致 `Services→Boot` 循环依赖),新增 Services 层 `LocalizationRuntime` 静态访问点由 `G.Initialize/Reset` 填充。(4) 音量按锁定契约存 `PlayerPrefs "ef.audio.*"`(spec 原文措辞为「存 Save」)。 | 第三方版本/程序集名对齐 + 分层契约疏漏补正;公共接口契约不变,`LocalizedText` 公共 API 与语义保持。安装版本:PrimeTween 1.3.3 / Cinemachine 3.1.7 / Input System 1.19.0。EditMode 109/109 全绿。 |
+| Phase 4 (商业化) | (1) `AdsService` 改工厂 lambda 显式调 3 参生产构造(VContainer 自动选「参数最多」构造选中 internal 测试构造,去解析未注册的 `Func<float>` 抛异常)—— 同 Phase 3 的可选参数默认值模式。(2) Unity IAP 程序集名核对为 `Unity.Purchasing`,与计划一致无需调整;真实广告 / Firebase SDK 不接入,只交付「接口 + 业务层 + Fake + 接入槽(`#if EF_ADMOB`/`#if EF_FIREBASE`)」,`UnityIAPProvider` 仅真机路径、不写 EditMode 单测。 | DI 注册写法修正 + 无人值守模式无法配置原生 SDK;业务逻辑(频控/掉单/广播)全 Fake 覆盖。EditMode 132/132 全绿。 |
+| Phase 5 (DevTools/模板/示例) | (1) DevTools 发布版零开销用代码内 `#if UNITY_EDITOR \|\| DEVELOPMENT_BUILD` 而非 asmdef `defineConstraints`(保证程序集始终编译、引用恒定有效,公共 API 在 `#if` 内外签名一致)。(2) TapRush UI 全部代码构建(无美术 prefab),经 prefab 化标 Addressable(`"ui/<TypeName>"`)走真实加载链路。(3) TapRush 点击音效用 Editor 程序化生成的 0.1s 正弦波 `AudioClip`,标 Addressable(`"audio/tap"`),补上 Phase 2 推迟的 Addressables 真实加载冒烟。(4) Cheat 控制台桥接(`IngameDebugConsole.DebugLogConsole.AddCommand`)、console prefab 实例化、Addressables Editor 标记 API 名以验证阶段 `unity_reflect` 核对实际安装版本为准。 | 示例游戏目标是打通框架各能力与 Addressables 真实加载,非美术产品;DevTools 零开销策略避免 `defineConstraints` 断引用。第三方 API 名最终以验证代理核对结果收口(见 Phase 5 计划末尾 "Deviations")。 |
+
+### 评审遗留 minor 问题(不阻塞,记录在案)
+
+各 Phase 评审发现、约定 Phase 5 收尾统一权衡的非阻塞问题,完整清单见 `docs/superpowers/known-minors.md`,要点摘录:
+
+- **Phase 1**:StateMachine 同步 Enter 下版本守卫不生效(异步场景才有意义,保留);`TimerService.Cancel` O(n) 扫描;公共类型 XML 文档注释普遍缺失。
+- **Phase 2**:`AddressablesAssetService` 的 `RefCount` 为死字段(`ReleaseScope` 直接整组释放);`PoolService.SpawnAsync` 以 `rotation == default` 判默认值而 `default(Quaternion)` 非法旋转;`JsonSaveService` 原子写未 fsync;`SaveOnPauseListener` 未挂 `OnApplicationQuit`(编辑器停播 / 桌面 Alt+F4 不落盘)。
+- **Phase 3**:Audio/Input 走显式 Ticker 桥接而 UIService 直接实现 `ITickable`,风格不对称;`UIService.Dispose` 中 `PopAllAsync().Forget()` 与同步 Destroy 有顺序隐患;`InputService.IsPointerOverUI` 无参重载多点触控下只对最后指针有效;`CinemachineCameraService.Shake` 的 `duration` 被丢弃(由 Impulse 包络承载);`LocalizedText` 首帧文本可能延迟(已有 `IsInitialized` 守卫)。
+- **Phase 4**:`IAPService` pending 队列以 `productId` 去重,同商品多次 Consumable 掉单只补一次;`UnityIAPProvider` 商店回调线程/时序假设未做主线程切换兜底(真机接入时验证)。
+
+> 备注:本表 Phase 5 行记录的是计划锁定的设计性偏差;其中第三方 API 名的最终核对结果(IngameDebugConsole/Addressables Editor/AudioClip 持久化)由 Phase 5 验证阶段在该 Phase 计划文档末尾 "Deviations" 小节据实补全。

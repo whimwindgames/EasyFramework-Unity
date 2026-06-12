@@ -26,3 +26,9 @@
 ## Phase 4
 - IAPService pending 队列以 productId 去重,同商品多次 Consumable 掉单只补一次
 - UnityIAPProvider 商店回调线程/时序假设未做主线程切换兜底(真机接入时验证)
+
+## Phase 5
+- CheatRegistry 增加了契约外的 internal ResetForTesting()(测试隔离需要,已接受)
+- TapRushFlow.GameplayState.Update 有重复的结束判定(示范代码可再精简)
+- PerfOverlay.OnGUI 每帧插值字符串分配(性能角标自身产生少量 GC,仅 DEV 构建)
+- CheatRegistry.GetTypes() 未兜底 ReflectionTypeLoadException
