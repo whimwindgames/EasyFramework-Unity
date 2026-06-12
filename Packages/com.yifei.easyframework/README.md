@@ -2,10 +2,35 @@
 
 Unity 2D 小游戏复用底座。DI 内核(VContainer)+ 静态门面(`G`)。从空项目到能跑的新游戏 < 10 分钟。
 
-- Unity 6000.3.15f1(URP + 新 Input System)
-- 设计文档:`docs/superpowers/specs/2026-06-12-easyframework-design.md`
-- 完整示例:`Assets/Game/`(TapRush 小游戏)
-- 新游戏模板:`Assets/EasyFramework/_Template/`(复制改名即跑,见 `_Template/README.md`)
+- 要求 Unity 6000.0+(URP + 新 Input System)
+- 设计文档与完整仓库:https://github.com/2056913185qqcom/EasyFramework-Unity
+- 两个 Sample(经 Package Manager → Samples 导入):**TapRush**(完整示例游戏)、**Template**(新游戏空白模板)
+
+## 安装
+
+全部依赖由 OpenUPM 解析。**OpenUPM CLI(推荐):**
+
+```bash
+openupm add com.yifei.easyframework
+```
+
+**手动:** 把下面合并进 `Packages/manifest.json`,再在 Package Manager 按名安装 `com.yifei.easyframework`:
+
+````json
+"scopedRegistries": [
+  {
+    "name": "OpenUPM",
+    "url": "https://package.openupm.com",
+    "scopes": [
+      "com.yifei",
+      "com.cysharp",
+      "jp.hadashikick",
+      "com.kyrylokuzyk",
+      "com.yasirkula"
+    ]
+  }
+]
+````
 
 ---
 
@@ -91,7 +116,7 @@ G.Initialize(resolver)   把已解析服务绑定到 G 门面
 
 ## 三、新游戏十分钟上手
 
-1. 复制 `Assets/EasyFramework/_Template/` 到 `Assets/<YourGame>/`(详细改名清单见 `_Template/README.md`)。
+1. 经 Package Manager → Samples 导入 **Template**,把导入后的目录复制改名为你的游戏(详细改名清单见 Template 的 `README.md`)。
 2. 改命名空间 `EasyFramework.Template` → `<YourGame>`,改类名 `Template*` → `<YourGame>*`。
 3. 打开 `Assets/Scenes/Boot.unity`,在 `[EasyFramework]`(挂 `RootLifetimeScope`)下新建子 GameObject,
    挂你的 `<YourGame>LifetimeScope`(嵌套 `LifetimeScope` 自动成为 Root 的子作用域)。
@@ -99,7 +124,7 @@ G.Initialize(resolver)   把已解析服务绑定到 G 门面
    用 `G.Pool` 管玩法对象,用 `G.Save` 存档。
 5. Play。`BootCompletedEvent` 发布后进入 Menu。
 
-完整可运行参考:`Assets/Game/`(**TapRush** —— 点圈得分、60 秒倒计时的最小完整游戏,逐一打通了上表所有能力,
+完整可运行参考:导入 **TapRush** Sample(**TapRush** —— 点圈得分、60 秒倒计时的最小完整游戏,逐一打通了上表所有能力,
 含 Addressables 真实加载、Fake 商业化与存档读回)。
 
 ---
@@ -151,7 +176,7 @@ OnSetup(args)  →  PlayEnter()  →  (显示)  →  PlayExit()  →  (销毁)
 - **作弊命令**:在任意 **静态方法** 上标 `[Cheat("命令名", "说明")]`(参数支持无参 / `int` / `float` / `string` / `bool`),
   框架扫描程序集自动注册到控制台。命令名重复或参数类型不支持的方法会被跳过并 `LogWarning`。
 
-示例(见 `Assets/Game/TapRushCheats.cs`):
+示例(见 TapRush Sample 的 `TapRushCheats.cs`):
 
 ```csharp
 [Cheat("tap_set_highscore", "Set TapRush high score to value")]

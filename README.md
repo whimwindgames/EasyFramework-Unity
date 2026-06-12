@@ -23,21 +23,51 @@
 
 ## 安装
 
-> UPM 包(`com.yifei.easyframework`)正在打包中,即将发布到 OpenUPM。届时一条命令即可安装:
->
-> ```bash
-> openupm add com.yifei.easyframework
-> ```
+要求 Unity 6000.0 或更高。全部依赖由 OpenUPM 解析,二选一:
 
-当前可直接克隆本仓库,用 Unity 6000.3 打开体验示例游戏。
+### 方式一:OpenUPM CLI(推荐,需 Node.js)
+
+```bash
+openupm add com.yifei.easyframework
+```
+
+CLI 会自动配置 scoped registry、所有依赖 scope 和包本身。
+
+### 方式二:手动配置
+
+把下面这段合并进你的 `Packages/manifest.json`(已有 OpenUPM 条目则只需补全缺失的 scope):
+
+````json
+"scopedRegistries": [
+  {
+    "name": "OpenUPM",
+    "url": "https://package.openupm.com",
+    "scopes": [
+      "com.yifei",
+      "com.cysharp",
+      "jp.hadashikick",
+      "com.kyrylokuzyk",
+      "com.yasirkula"
+    ]
+  }
+]
+````
+
+然后在 Package Manager → **Add package by name** 输入 `com.yifei.easyframework`;或在收录前直接用 git URL(依赖仍由上面的 registry 解析):
+
+```
+"com.yifei.easyframework": "https://github.com/2056913185qqcom/EasyFramework-Unity.git?path=Packages/com.yifei.easyframework#v0.1.0"
+```
+
+安装后,在 Package Manager 里选中 EasyFramework → **Samples** 标签导入 **TapRush** 即可上手。
 
 ## 示例游戏:TapRush
 
-`Assets/Game/` 下是用本框架做的一个完整可玩小游戏 **TapRush**(点击得分 + 60 秒倒计时 + 结算 + 看广告翻倍 + 存档最高分)。打开 `Assets/Scenes/Boot.unity` 点 Play 即玩——它同时是框架所有能力的活文档。
+包内 `Samples~/TapRush` 是用本框架做的一个完整可玩小游戏 **TapRush**(点击得分 + 60 秒倒计时 + 结算 + 看广告翻倍 + 存档最高分)——它是框架所有能力的活文档。通过 Package Manager 的 Samples 导入后,打开其 `TapRushBoot` 场景点 Play 即玩。另一个 Sample **Template** 是新游戏空白起步模板,复制改名即可作为你下一个游戏的骨架。
 
 ## 文档
 
-- [框架使用文档](Assets/EasyFramework/README.md) — 架构、`G.Xxx` 速查表、新游戏上手指南、SDK 接入槽说明
+- [框架使用文档](Packages/com.yifei.easyframework/README.md) — 架构、`G.Xxx` 速查表、新游戏上手指南、SDK 接入槽说明
 - [设计规格](docs/superpowers/specs/2026-06-12-easyframework-design.md) — 完整设计决策
 - [实现计划](docs/superpowers/plans/) — 分阶段实现细节
 
