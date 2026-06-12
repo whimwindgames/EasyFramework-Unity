@@ -1,5 +1,20 @@
 {
   "name": "EasyFramework.DevTools",
   "rootNamespace": "EasyFramework.DevTools",
-  "references": ["EasyFramework.Core", "UniTask", "VContainer", "MessagePipe"]
+  "references": [
+    "EasyFramework.Core",
+    "EasyFramework.Services",
+    "EasyFramework.Boot",
+    "UniTask",
+    "VContainer",
+    "MessagePipe",
+    "IngameDebugConsole.Runtime"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "noEngineReferences": false
 }

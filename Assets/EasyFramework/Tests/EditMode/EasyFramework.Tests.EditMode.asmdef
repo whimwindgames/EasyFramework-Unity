@@ -6,6 +6,8 @@
     "EasyFramework.Services",
     "EasyFramework.Monetization",
     "EasyFramework.Boot",
+    "EasyFramework.DevTools",
+    "EasyFramework.Template",
     "UniTask",
     "VContainer",
     "MessagePipe",
