@@ -1,0 +1,7 @@
+# OpenUPM 收录登记内容
+# 提交方式:打开 https://openupm.com/packages/add/ ,粘贴仓库地址即可自动生成并提交 PR
+# 仓库:https://github.com/whimwindgames/EasyFramework-Unity
+# 包名:com.yifei.easyframework
+# 包在仓库中的子路径:Packages/com.yifei.easyframework
+# 最低版本 tag:v0.1.0
+# Git tag 前缀:v(标准 semver tag)

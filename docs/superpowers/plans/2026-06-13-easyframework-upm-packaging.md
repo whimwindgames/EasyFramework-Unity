@@ -179,8 +179,8 @@ git commit -m "chore(deps): switch UniTask/VContainer/MessagePipe from git URL t
     "name": "yifei"
   },
   "license": "MIT",
-  "documentationUrl": "https://github.com/2056913185qqcom/EasyFramework-Unity#readme",
-  "changelogUrl": "https://github.com/2056913185qqcom/EasyFramework-Unity/blob/main/Packages/com.yifei.easyframework/CHANGELOG.md",
+  "documentationUrl": "https://github.com/whimwindgames/EasyFramework-Unity#readme",
+  "changelogUrl": "https://github.com/whimwindgames/EasyFramework-Unity/blob/main/Packages/com.yifei.easyframework/CHANGELOG.md",
   "dependencies": {
     "com.unity.addressables": "3.1.0",
     "com.unity.cinemachine": "3.1.7",
@@ -525,7 +525,7 @@ CLI 会自动配置 OpenUPM scoped registry、补齐全部 scopes 并安装本�
 OpenUPM 收录构建完成前,可先用 git URL 装包(依赖仍由上面的 OpenUPM registry 解析,故 registry 配置块仍需先粘贴):
 
 ```
-https://github.com/2056913185qqcom/EasyFramework-Unity.git?path=Packages/com.yifei.easyframework#v0.1.0
+https://github.com/whimwindgames/EasyFramework-Unity.git?path=Packages/com.yifei.easyframework#v0.1.0
 ```
 ````
 
@@ -651,7 +651,7 @@ OpenUPM 收录 = 向 `openupm/openupm` 仓库加一个 `data/packages/com.yifei.
 name: com.yifei.easyframework
 displayName: EasyFramework
 description: 开箱即用的 Unity 2D 移动游戏复用底座(VContainer DI 内核 + 静态门面)。
-repoUrl: https://github.com/2056913185qqcom/EasyFramework-Unity
+repoUrl: https://github.com/whimwindgames/EasyFramework-Unity
 parentRepoUrl: null
 licenseSpdxId: MIT
 licenseName: MIT License
@@ -661,7 +661,7 @@ topics:
   - dependency-injection
   - mobile
 readme: main:Packages/com.yifei.easyframework/README.md
-hunter: 2056913185qqcom
+hunter: whimwindgames
 gitTagPrefix: v
 gitTagIgnore: null
 minVersion: 0.1.0

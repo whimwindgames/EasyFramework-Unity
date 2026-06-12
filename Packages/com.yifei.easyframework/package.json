@@ -8,8 +8,8 @@
     "name": "yifei"
   },
   "license": "MIT",
-  "documentationUrl": "https://github.com/2056913185qqcom/EasyFramework-Unity#readme",
-  "changelogUrl": "https://github.com/2056913185qqcom/EasyFramework-Unity/blob/main/Packages/com.yifei.easyframework/CHANGELOG.md",
+  "documentationUrl": "https://github.com/whimwindgames/EasyFramework-Unity#readme",
+  "changelogUrl": "https://github.com/whimwindgames/EasyFramework-Unity/blob/main/Packages/com.yifei.easyframework/CHANGELOG.md",
   "dependencies": {
     "com.unity.addressables": "3.1.0",
     "com.unity.cinemachine": "3.1.7",

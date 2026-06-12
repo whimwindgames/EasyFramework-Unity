@@ -57,7 +57,7 @@ CLI 会自动配置 scoped registry、所有依赖 scope 和包本身。
 然后在 Package Manager → **Add package by name** 输入 `com.yifei.easyframework`;或在收录前直接用 git URL(依赖仍由上面的 registry 解析):
 
 ```
-"com.yifei.easyframework": "https://github.com/2056913185qqcom/EasyFramework-Unity.git?path=Packages/com.yifei.easyframework#v0.1.0"
+"com.yifei.easyframework": "https://github.com/whimwindgames/EasyFramework-Unity.git?path=Packages/com.yifei.easyframework#v0.1.0"
 ```
 
 安装后,在 Package Manager 里选中 EasyFramework → **Samples** 标签导入 **TapRush** 即可上手。

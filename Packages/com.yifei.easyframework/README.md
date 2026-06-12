@@ -3,7 +3,7 @@
 Unity 2D 小游戏复用底座。DI 内核(VContainer)+ 静态门面(`G`)。从空项目到能跑的新游戏 < 10 分钟。
 
 - 要求 Unity 6000.0+(URP + 新 Input System)
-- 设计文档与完整仓库:https://github.com/2056913185qqcom/EasyFramework-Unity
+- 设计文档与完整仓库:https://github.com/whimwindgames/EasyFramework-Unity
 - 两个 Sample(经 Package Manager → Samples 导入):**TapRush**(完整示例游戏)、**Template**(新游戏空白模板)
 
 ## 安装
