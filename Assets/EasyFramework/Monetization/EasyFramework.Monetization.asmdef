@@ -1,5 +1,19 @@
 {
   "name": "EasyFramework.Monetization",
   "rootNamespace": "EasyFramework.Monetization",
-  "references": ["EasyFramework.Core", "UniTask", "VContainer", "MessagePipe"]
+  "references": [
+    "EasyFramework.Core",
+    "EasyFramework.Services",
+    "UniTask",
+    "VContainer",
+    "MessagePipe",
+    "Unity.Purchasing"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "noEngineReferences": false
 }
