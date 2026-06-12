@@ -8,7 +8,11 @@
     "VContainer",
     "MessagePipe",
     "Unity.Addressables",
-    "Unity.ResourceManager"
+    "Unity.ResourceManager",
+    "PrimeTween",
+    "Unity.Cinemachine",
+    "Unity.InputSystem",
+    "Unity.TextMeshPro"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],
