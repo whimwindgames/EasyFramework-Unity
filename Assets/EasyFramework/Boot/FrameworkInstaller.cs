@@ -2,6 +2,9 @@ using System.Collections.Generic;
 using EasyFramework.Core.Boot;
 using EasyFramework.Core.Events;
 using EasyFramework.Core.Timing;
+using EasyFramework.Monetization.Ads;
+using EasyFramework.Monetization.Analytics;
+using EasyFramework.Monetization.IAP;
 using EasyFramework.Services.Assets;
 using EasyFramework.Services.Audio;
 using EasyFramework.Services.Cameras;
@@ -15,6 +18,7 @@ using EasyFramework.Services.Saves;
 using EasyFramework.Services.Scenes;
 using EasyFramework.Services.UI;
 using MessagePipe;
+using UnityEngine;
 using VContainer;
 using VContainer.Unity;
 
@@ -35,6 +39,8 @@ namespace EasyFramework
         public IReadOnlyList<LocalizationTable> LocalizationTables;
         /// <summary>默认 locale;无 PlayerPrefs 时的初值。(Phase 3b)默认 "zh-CN"。</summary>
         public string DefaultLocale = "zh-CN";
+        /// <summary>内购商品目录;可空(为 null 时框架用空 catalog,无商品)。</summary>
+        public ProductCatalog ProductCatalog;
     }
 
     /// <summary>框架服务注册(纯逻辑,便于脱离 MonoBehaviour 测试)。入口点注册在 RootLifetimeScope。</summary>
@@ -109,6 +115,44 @@ namespace EasyFramework
 
             // ---- Haptics(Phase 3b)----
             builder.Register<HapticsService>(Lifetime.Singleton).As<IHapticsService>();
+
+            // ---- Analytics(Phase 4)----
+            // 后端多注册:DebugAnalyticsBackend(编辑器/调试)。真机接 Firebase 时,
+            // 在 GameLifetimeScope 追加注册 IAnalyticsBackend -> FirebaseAnalyticsBackend(#if EF_FIREBASE)。
+            builder.Register<IAnalyticsBackend, DebugAnalyticsBackend>(Lifetime.Singleton);
+            builder.Register<IAnalyticsService>(c =>
+                new AnalyticsService(new List<IAnalyticsBackend>(c.Resolve<IReadOnlyList<IAnalyticsBackend>>())),
+                Lifetime.Singleton);
+            // 自动标准事件订阅(BootCompleted / SceneLoaded)。
+            builder.RegisterEntryPoint<AnalyticsAutoTracker>();
+
+            // ---- Ads(Phase 4)----
+            // Fake provider 在编辑器与真机都注册(保证真机也能跑通);接 AdMob/LevelPlay 时,
+            // 在 GameLifetimeScope 覆盖注册 IAdsProvider -> AdMobAdsProvider(#if EF_ADMOB)。
+            builder.Register<IAdsProvider, FakeAdsProvider>(Lifetime.Singleton);
+            // 工厂 lambda 显式走 3 参生产构造:AdsService 另有一个 internal(IAdsProvider,IConfigService,
+            // IAnalyticsService,Func<float>)测试构造,VContainer 自动选最长构造会去解析未注册的 Func<float> 而失败
+            // (与上方 ISceneTransition/SceneService 同因)。这里固定调公开构造,Func<float> 默认走 Time.realtimeSinceStartup。
+            builder.Register<AdsService>(c => new AdsService(
+                c.Resolve<IAdsProvider>(),
+                c.Resolve<IConfigService>(),
+                c.Resolve<IAnalyticsService>()), Lifetime.Singleton).As<IAdsService>().AsSelf();
+            builder.Register<AdsBootTask>(Lifetime.Singleton).As<IBootTask>();
+
+            // ---- IAP(Phase 4)----
+            var catalog = options.ProductCatalog;
+            if (catalog == null)
+                catalog = ScriptableObject.CreateInstance<ProductCatalog>(); // 空目录兜底,可空契约。
+            builder.RegisterInstance(catalog);
+#if UNITY_EDITOR
+            // 编辑器走 Fake,EditMode 测试与编辑器联调均不触真实 SDK。
+            builder.Register<IIAPProvider, FakeIAPProvider>(Lifetime.Singleton);
+#else
+            // 真机:Unity IAP 真实现(官方包)。这是接入槽,换其它商店 SDK 适配器也在此替换。
+            builder.Register<IIAPProvider, UnityIAPProvider>(Lifetime.Singleton);
+#endif
+            builder.Register<IAPService>(Lifetime.Singleton).As<IIAPService>().AsSelf();
+            builder.Register<IAPBootTask>(Lifetime.Singleton).As<IBootTask>();
         }
 
         static SaveProfile CreateDefaultSaveProfile()

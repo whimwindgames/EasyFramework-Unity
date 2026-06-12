@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using EasyFramework.Core.Boot;
 using EasyFramework.Core.Timing;
+using EasyFramework.Monetization.IAP;
 using EasyFramework.Services.Audio;
 using EasyFramework.Services.Configs;
 using EasyFramework.Services.Inputs;
@@ -27,6 +28,9 @@ namespace EasyFramework
         [Header("默认语言")]
         [SerializeField] string _defaultLocale = "zh-CN";
 
+        [Header("内购商品目录(可空)")]
+        [SerializeField] ProductCatalog _productCatalog;
+
         protected override void Configure(IContainerBuilder builder)
         {
             var options = new FrameworkOptions
@@ -37,6 +41,7 @@ namespace EasyFramework
                 InitialScene = _initialScene,
                 LocalizationTables = _localizationTables,
                 DefaultLocale = _defaultLocale,
+                ProductCatalog = _productCatalog,
             };
 
             FrameworkInstaller.Install(builder, options);
