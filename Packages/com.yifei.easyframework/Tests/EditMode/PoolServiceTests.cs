@@ -48,6 +48,7 @@ namespace EasyFramework.Tests
 
             readonly List<Entry> _entries = new();
             long _nextId = 1;
+            public int CancelCallCount { get; private set; }
 
             public TimerHandle Schedule(float delay, Action callback, bool repeat = false, bool useUnscaledTime = false)
             {
@@ -56,7 +57,7 @@ namespace EasyFramework.Tests
                 return default; // 测试不需要真实 handle 值,仅需可调用 Advance 手动触发
             }
 
-            public void Cancel(TimerHandle handle) { }
+            public void Cancel(TimerHandle handle) => CancelCallCount++;
 
             /// <summary>测试钩子:手动触发一次所有已注册的 repeat 回调(模拟到达周期时间点)。</summary>
             public void Fire()
@@ -159,6 +160,14 @@ namespace EasyFramework.Tests
         }
 
         [Test]
+        public void Dispose_CancelsPeriodicScanTimer()
+        {
+            _pool.Dispose();
+            Assert.AreEqual(1, _timer.CancelCallCount,
+                "Dispose 应取消构造时注册的周期缩容扫描定时器,避免定时器在实例销毁后继续持有回调");
+        }
+
+        [Test]
         public void IdleTimeout_NotConfigured_NeverDestroysIdleInstance()
         {
             var a = _pool.SpawnAsync("bullet").GetAwaiter().GetResult();
@@ -224,6 +233,30 @@ namespace EasyFramework.Tests
 
             // b 当前是 active 状态(未 Despawn),不应被缩容逻辑影响。
             Assert.DoesNotThrow(() => pool.Despawn(b));
+        }
+
+        [Test]
+        public void SetIdleTimeout_DisableThenReenable_DoesNotUseStaleTimestamp()
+        {
+            var now = 100f;
+            float NowProvider() => now;
+            var pool = new PoolService(_assets, _bus, _timer, NowProvider);
+            pool.SetIdleTimeout("bullet", 5f);
+
+            var a = pool.SpawnAsync("bullet").GetAwaiter().GetResult();
+            pool.Despawn(a); // _idleSince[a] 记录为 now(100)
+
+            pool.SetIdleTimeout("bullet", null); // 关闭缩容;_idleSince[a] 的旧时间戳不应再被使用
+
+            now += 1000f; // 远超原先 5 秒阈值的时间流逝,但因缩容已关闭,不应影响 a
+            _timer.Fire(); // 缩容关闭期间的扫描不应销毁 a(现有行为,IdleTimeout_NotConfigured_* 已覆盖类似场景)
+
+            pool.SetIdleTimeout("bullet", 5f); // 重新开启;应视为全新计时起点,而不是沿用旧的 _idleSince[a]
+
+            _timer.Fire(); // 重新开启后的第一次扫描:若未清理旧时间戳,now - 旧时间戳(=1000)>= 5,会被误杀
+
+            var b = pool.SpawnAsync("bullet").GetAwaiter().GetResult();
+            Assert.AreSame(a, b, "重新开启缩容后不应立即销毁实例——应获得全新的闲置宽限期,而不是被陈旧时间戳误杀");
         }
 
         [Test]

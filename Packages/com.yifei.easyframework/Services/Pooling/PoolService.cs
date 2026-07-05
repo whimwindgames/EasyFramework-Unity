@@ -22,6 +22,7 @@ namespace EasyFramework.Services.Pooling
         readonly ITimerService _timer;
         readonly Func<float> _now;
         readonly IDisposable _sceneUnloadSub;
+        readonly TimerHandle _scanTimerHandle;
         readonly Dictionary<string, Stack<GameObject>> _idle = new();
         readonly HashSet<GameObject> _active = new();
         readonly Dictionary<GameObject, IPoolable[]> _poolablesCache = new();
@@ -44,7 +45,8 @@ namespace EasyFramework.Services.Pooling
             _timer = timer;
             _now = nowProvider;
             _sceneUnloadSub = events.Subscribe<SceneWillUnloadEvent>(_ => ClearAll());
-            _timer?.Schedule(DefaultScanIntervalSeconds, ScanIdleTimeouts, repeat: true);
+            if (_timer != null)
+                _scanTimerHandle = _timer.Schedule(DefaultScanIntervalSeconds, ScanIdleTimeouts, repeat: true);
         }
 
         /// <summary>
@@ -55,9 +57,28 @@ namespace EasyFramework.Services.Pooling
         public void SetIdleTimeout(string key, float? idleTimeoutSeconds)
         {
             if (idleTimeoutSeconds.HasValue && idleTimeoutSeconds.Value > 0f)
+            {
                 _idleTimeoutSeconds[key] = idleTimeoutSeconds.Value;
+            }
             else
+            {
                 _idleTimeoutSeconds.Remove(key);
+
+                // 清除该 key 下已记录的 _idleSince 时间戳,避免日后重新开启缩容时
+                // 沿用陈旧时间戳导致实例被立即误杀(而不是获得全新的闲置宽限期)。
+                // SetIdleTimeout 是配置期调用,预期低频,这里的 O(n) 扫描是可接受的代价。
+                List<GameObject> staleKeys = null;
+                foreach (var go in _idleSince.Keys)
+                {
+                    if (go == null) continue;
+                    var marker = go.GetComponent<PooledMarker>();
+                    if (marker != null && marker.Key == key)
+                        (staleKeys ??= new List<GameObject>()).Add(go);
+                }
+                if (staleKeys != null)
+                    foreach (var go in staleKeys)
+                        _idleSince.Remove(go);
+            }
         }
 
         public async UniTask PrewarmAsync(string key, int count)
@@ -216,6 +237,7 @@ namespace EasyFramework.Services.Pooling
         public void Dispose()
         {
             _sceneUnloadSub?.Dispose();
+            _timer?.Cancel(_scanTimerHandle);
             ClearAll();
             if (_root != null) DestroyHandler(_root);
         }
