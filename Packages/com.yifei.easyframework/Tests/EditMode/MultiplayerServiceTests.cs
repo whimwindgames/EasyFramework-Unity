@@ -5,6 +5,7 @@ using Cysharp.Threading.Tasks;
 using EasyFramework.Core.Events;
 using EasyFramework.Services.Multiplayer;
 using NUnit.Framework;
+using VContainer;
 
 namespace EasyFramework.Tests
 {
@@ -133,6 +134,40 @@ namespace EasyFramework.Tests
             Assert.AreEqual(1, messages.Count);
             Assert.AreEqual("chat", messages[0].Channel);
             CollectionAssert.AreEqual(new byte[] { 9, 8, 7 }, messages[0].Payload);
+        }
+
+        static EasyFramework.FrameworkOptions MakeFrameworkOptionsForBoundaryTest()
+            => new EasyFramework.FrameworkOptions
+            {
+                SaveDirectory = System.IO.Path.Combine(
+                    System.IO.Path.GetTempPath(), "ef_multiplayer_boundary_" + System.Guid.NewGuid().ToString("N")),
+            };
+
+        [Test]
+        public void FrameworkInstaller_DoesNotRegisterMultiplayerTypes()
+        {
+            var builder = new VContainer.ContainerBuilder();
+            EasyFramework.FrameworkInstaller.Install(builder, MakeFrameworkOptionsForBoundaryTest());
+            using var container = builder.Build();
+
+            // FrameworkInstaller 确实没有注册这两个类型,Resolve 必须抛 VContainerException——
+            // 这条测试就是要证明"没注册"这件事本身,而不是绕开它。
+            Assert.Throws<VContainer.VContainerException>(() => container.Resolve<IMultiplayerService>(),
+                "FrameworkInstaller must not register IMultiplayerService — multiplayer is an opt-in module wired by individual games.");
+            Assert.Throws<VContainer.VContainerException>(() => container.Resolve<IMultiplayerProvider>(),
+                "FrameworkInstaller must not register IMultiplayerProvider — multiplayer is an opt-in module wired by individual games.");
+        }
+
+        [Test]
+        public void G_DoesNotExposeMultiplayer_NoSuchMemberExistsByDesign()
+        {
+            // 契约式回归标记:G 不应新增 Multiplayer 属性(设计原因见 spec §3.3——
+            // G 的契约是 BootCompletedEvent 后一定可用,可选模块不能挂一个可能为 null 的入口)。
+            // 用反射断言,而不是直接引用 G.Multiplayer——后者一旦被误加,本测试也无法通过编译来提醒,
+            // 反射断言能在"有人加了这个属性"时给出明确失败信息而不是静默编译通过。
+            var member = typeof(EasyFramework.G).GetProperty("Multiplayer");
+            Assert.IsNull(member,
+                "G must not expose a Multiplayer property — multiplayer is opt-in and wired per-game via constructor injection, not through G.");
         }
     }
 }
