@@ -1,3 +1,4 @@
+using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 
@@ -26,6 +27,7 @@ namespace EasyFramework.Services.Multiplayer
     public interface IMultiplayerProvider
     {
         ConnectionState State { get; }
+        event Action<MultiplayerMessageReceivedEvent> MessageReceived;
         UniTask ConnectAsync(string sessionId, CancellationToken ct);
         UniTask DisconnectAsync();
         UniTask SendAsync(string channel, byte[] payload);

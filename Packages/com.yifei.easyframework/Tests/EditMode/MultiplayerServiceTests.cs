@@ -69,5 +69,20 @@ namespace EasyFramework.Tests
             Assert.AreEqual("chat", received.Value.Channel);
             CollectionAssert.AreEqual(new byte[] { 1, 2, 3 }, received.Value.Payload);
         }
+
+        [Test]
+        public void IMultiplayerProvider_ExposesMessageReceivedEvent_ViaInterfaceType()
+        {
+            IMultiplayerProvider provider = new FakeMultiplayerProvider();
+            provider.ConnectAsync("session-1", CancellationToken.None).GetAwaiter().GetResult();
+            MultiplayerMessageReceivedEvent? received = null;
+            provider.MessageReceived += evt => received = evt;
+
+            provider.SendAsync("chat", new byte[] { 4, 5, 6 }).GetAwaiter().GetResult();
+
+            Assert.IsTrue(received.HasValue);
+            Assert.AreEqual("chat", received.Value.Channel);
+            CollectionAssert.AreEqual(new byte[] { 4, 5, 6 }, received.Value.Payload);
+        }
     }
 }
