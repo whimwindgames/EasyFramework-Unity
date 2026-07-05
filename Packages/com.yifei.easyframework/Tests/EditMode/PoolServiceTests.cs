@@ -225,5 +225,46 @@ namespace EasyFramework.Tests
             // b 当前是 active 状态(未 Despawn),不应被缩容逻辑影响。
             Assert.DoesNotThrow(() => pool.Despawn(b));
         }
+
+        [Test]
+        public void IdleTimeout_RemovingMiddleInstance_PreservesLifoOrderOfRemaining()
+        {
+            var now = 100f;
+            float NowProvider() => now;
+            var pool = new PoolService(_assets, _bus, _timer, NowProvider);
+            pool.SetIdleTimeout("bullet", 5f); // 必须先配置阈值,Despawn 时才会记录 _idleSince
+
+            // 三个不同实例:栈为空,每次 SpawnAsync 都会实例化新对象。
+            var a = pool.SpawnAsync("bullet").GetAwaiter().GetResult();
+            var b = pool.SpawnAsync("bullet").GetAwaiter().GetResult();
+            var c = pool.SpawnAsync("bullet").GetAwaiter().GetResult();
+
+            // 先让 a 很早就 Despawn 并闲置很久(它将是本次唯一超时的实例)。
+            pool.Despawn(a);
+
+            now += 100f; // a 闲置时间大幅增加,后面用它来确保只有 a 超时
+            // 此时若立即扫描,a 会被销毁;先不扫描,继续按 c、b 的顺序 Despawn,
+            // 使栈自底向上为 a(最先入栈) -> c -> b(最后入栈,在栈顶)。
+            pool.Despawn(c);
+            pool.Despawn(b);
+            // 栈自顶向下(出栈顺序): b, c, a。a 在栈底,闲置时间远超 c、b。
+
+            now += 2f; // a 的闲置时间已远超 5 秒阈值;c、b 刚 Despawn 不久(闲置 2 秒),未超时
+            _timer.Fire(); // 触发缩容扫描:应仅销毁 a,c 与 b 的相对 LIFO 顺序应保持不变
+
+            Assert.IsTrue(a == null, "a 应已被缩容扫描销毁(前置条件,确保下面验证的是移除后的顺序)");
+
+            // 缩容前,出栈顺序应为 b(最后 Despawn,最先复用)、然后 c。
+            // 该断言验证:移除处于栈底的 a 后,剩余的 b、c 相对顺序未被破坏性地反转。
+            var first = pool.SpawnAsync("bullet").GetAwaiter().GetResult();
+            Assert.AreSame(b, first, "最后一个存活的 Despawn 实例应最先被复用(LIFO)");
+
+            var second = pool.SpawnAsync("bullet").GetAwaiter().GetResult();
+            Assert.AreSame(c, second, "次新的存活 Despawn 实例应第二个被复用");
+
+            // a 已被缩容销毁,不应再出现在池中被复用。
+            Assert.AreNotSame(a, first);
+            Assert.AreNotSame(a, second);
+        }
     }
 }

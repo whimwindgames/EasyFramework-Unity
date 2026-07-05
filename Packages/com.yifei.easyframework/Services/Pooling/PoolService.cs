@@ -171,15 +171,17 @@ namespace EasyFramework.Services.Pooling
                 if (marker != null && _idle.TryGetValue(marker.Key, out var stack))
                 {
                     // Stack 不支持随机移除,重建剩余元素(缩容是低频操作,重建成本可忽略)。
-                    var remaining = new Stack<GameObject>();
+                    // stack 的 foreach 枚举顺序是出栈顺序(栈顶在前,即最近入栈的在前)。
+                    // 先按这个顺序收集幸存元素(此时列表顺序=原栈顶到栈底),
+                    // 再按列表的逆序(栈底到栈顶)依次 Push,才能让原本更靠近栈顶的
+                    // 幸存元素重新回到新栈的顶部,保持原有相对 LIFO 顺序不变。
+                    var remaining = new List<GameObject>();
                     foreach (var item in stack)
                         if (!ReferenceEquals(item, go))
-                            remaining.Push(item);
-                    // 上面按出栈顺序 push 会反转顺序,用临时数组还原原始 LIFO 顺序。
-                    var arr = remaining.ToArray();
+                            remaining.Add(item);
                     stack.Clear();
-                    for (var i = arr.Length - 1; i >= 0; i--)
-                        stack.Push(arr[i]);
+                    for (var i = remaining.Count - 1; i >= 0; i--)
+                        stack.Push(remaining[i]);
                 }
                 _idleSince.Remove(go);
                 _poolablesCache.Remove(go);
