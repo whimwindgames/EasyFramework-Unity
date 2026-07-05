@@ -14,6 +14,7 @@ using EasyFramework.Services.Haptics;
 using EasyFramework.Services.Inputs;
 using EasyFramework.Services.Juice;
 using EasyFramework.Services.Localization;
+using EasyFramework.Services.Network;
 using EasyFramework.Services.Pooling;
 using EasyFramework.Services.Saves;
 using EasyFramework.Services.Scenes;
@@ -83,6 +84,12 @@ namespace EasyFramework
             builder.Register<ConfigService>(c => new ConfigService(tables, c.Resolve<IRemoteConfigProvider>()),
                 Lifetime.Singleton).As<IConfigService>().AsSelf();
             builder.Register<ConfigBootTask>(Lifetime.Singleton).As<IBootTask>();
+
+            // ---- Http(网络基础层)----
+            // 通用 HTTP 基础设施,所有游戏都可能用到。UnityWebRequestTransport 是唯一发起真实网络请求的实现;
+            // EditMode 测试通过注入 FakeHttpTransport 验证 HttpService 的重试/超时/反序列化逻辑。
+            builder.Register<IHttpTransport, UnityWebRequestTransport>(Lifetime.Singleton);
+            builder.Register<HttpService>(Lifetime.Singleton).As<IHttpService>().AsSelf();
 
             // ---- Pool(Phase 2; idle auto-shrink added later)----
             // 工厂 lambda 显式走 3 参生产构造:PoolService 另有一个 internal(IAssetService,IEventBus,

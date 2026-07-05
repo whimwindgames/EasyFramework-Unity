@@ -164,6 +164,7 @@ namespace EasyFramework.Tests
             Assert.IsNull(EasyFramework.G.IAP);
             Assert.IsNull(EasyFramework.G.Analytics);
             Assert.IsNull(EasyFramework.G.ContentUpdate);
+            Assert.IsNull(EasyFramework.G.Http);
         }
 
         [Test]
