@@ -4,6 +4,7 @@
   "references": [
     "EasyFramework.Core",
     "EasyFramework.Services",
+    "EasyFramework.Services.Localization.Editor",
     "EasyFramework.Monetization",
     "EasyFramework.Boot",
     "EasyFramework.DevTools",
