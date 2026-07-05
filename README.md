@@ -2,8 +2,8 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Unity-6000.3-black?logo=unity" alt="Unity 6000.3">
-  <img src="https://img.shields.io/badge/tests-137%20passing-2dd4bf" alt="137 tests">
-  <img src="https://img.shields.io/badge/openupm-v0.1.0-blue" alt="OpenUPM">
+  <img src="https://img.shields.io/badge/tests-187%20passing-2dd4bf" alt="187 tests">
+  <img src="https://img.shields.io/badge/openupm-v0.2.0-blue" alt="OpenUPM">
   <img src="https://img.shields.io/badge/platform-iOS%20%7C%20Android-388bfd" alt="iOS / Android">
   <img src="https://img.shields.io/badge/DI-VContainer-a371f7" alt="VContainer">
 </p>
