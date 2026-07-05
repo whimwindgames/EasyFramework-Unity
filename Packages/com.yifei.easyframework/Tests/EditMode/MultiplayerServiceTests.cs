@@ -84,5 +84,55 @@ namespace EasyFramework.Tests
             Assert.AreEqual("chat", received.Value.Channel);
             CollectionAssert.AreEqual(new byte[] { 4, 5, 6 }, received.Value.Payload);
         }
+
+        [Test]
+        public void MultiplayerService_ConnectAsync_PublishesConnectionStateChangedEvent()
+        {
+            var provider = new FakeMultiplayerProvider();
+            var bus = new FakeBus();
+            var events = new List<ConnectionStateChangedEvent>();
+            bus.Subscribe<ConnectionStateChangedEvent>(e => events.Add(e));
+            var svc = new MultiplayerService(provider, bus);
+
+            svc.ConnectAsync("session-1", CancellationToken.None).GetAwaiter().GetResult();
+
+            Assert.AreEqual(1, events.Count);
+            Assert.AreEqual(ConnectionState.Connected, events[0].State);
+            Assert.AreEqual(ConnectionState.Connected, svc.State);
+        }
+
+        [Test]
+        public void MultiplayerService_DisconnectAsync_PublishesConnectionStateChangedEvent()
+        {
+            var provider = new FakeMultiplayerProvider();
+            var bus = new FakeBus();
+            var events = new List<ConnectionStateChangedEvent>();
+            var svc = new MultiplayerService(provider, bus);
+            svc.ConnectAsync("session-1", CancellationToken.None).GetAwaiter().GetResult();
+            bus.Subscribe<ConnectionStateChangedEvent>(e => events.Add(e));
+
+            svc.DisconnectAsync().GetAwaiter().GetResult();
+
+            Assert.AreEqual(1, events.Count);
+            Assert.AreEqual(ConnectionState.Disconnected, events[0].State);
+            Assert.AreEqual(ConnectionState.Disconnected, svc.State);
+        }
+
+        [Test]
+        public void MultiplayerService_SendAsync_ProviderLoopback_PublishesMessageReceivedEvent()
+        {
+            var provider = new FakeMultiplayerProvider();
+            var bus = new FakeBus();
+            var messages = new List<MultiplayerMessageReceivedEvent>();
+            bus.Subscribe<MultiplayerMessageReceivedEvent>(e => messages.Add(e));
+            var svc = new MultiplayerService(provider, bus);
+            svc.ConnectAsync("session-1", CancellationToken.None).GetAwaiter().GetResult();
+
+            svc.SendAsync("chat", new byte[] { 9, 8, 7 }).GetAwaiter().GetResult();
+
+            Assert.AreEqual(1, messages.Count);
+            Assert.AreEqual("chat", messages[0].Channel);
+            CollectionAssert.AreEqual(new byte[] { 9, 8, 7 }, messages[0].Payload);
+        }
     }
 }
