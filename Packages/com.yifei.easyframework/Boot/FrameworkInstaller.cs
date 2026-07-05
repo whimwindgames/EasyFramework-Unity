@@ -9,10 +9,12 @@ using EasyFramework.Services.Assets;
 using EasyFramework.Services.Audio;
 using EasyFramework.Services.Cameras;
 using EasyFramework.Services.Configs;
+using EasyFramework.Services.ContentUpdate;
 using EasyFramework.Services.Haptics;
 using EasyFramework.Services.Inputs;
 using EasyFramework.Services.Juice;
 using EasyFramework.Services.Localization;
+using EasyFramework.Services.Network;
 using EasyFramework.Services.Pooling;
 using EasyFramework.Services.Saves;
 using EasyFramework.Services.Scenes;
@@ -83,8 +85,20 @@ namespace EasyFramework
                 Lifetime.Singleton).As<IConfigService>().AsSelf();
             builder.Register<ConfigBootTask>(Lifetime.Singleton).As<IBootTask>();
 
-            // ---- Pool(Phase 2)----
-            builder.Register<PoolService>(Lifetime.Singleton).As<IPoolService>().AsSelf();
+            // ---- Http(网络基础层)----
+            // 通用 HTTP 基础设施,所有游戏都可能用到。UnityWebRequestTransport 是唯一发起真实网络请求的实现;
+            // EditMode 测试通过注入 FakeHttpTransport 验证 HttpService 的重试/超时/反序列化逻辑。
+            builder.Register<IHttpTransport, UnityWebRequestTransport>(Lifetime.Singleton);
+            builder.Register<HttpService>(Lifetime.Singleton).As<IHttpService>().AsSelf();
+
+            // ---- Pool(Phase 2; idle auto-shrink added later)----
+            // 工厂 lambda 显式走 3 参生产构造:PoolService 另有一个 internal(IAssetService,IEventBus,
+            // ITimerService,Func<float>)测试构造,VContainer 自动选最长构造会去解析未注册的 Func<float> 而失败
+            // (与上方 ISceneTransition/SceneService、AdsService 同因)。
+            builder.Register<PoolService>(c => new PoolService(
+                c.Resolve<IAssetService>(),
+                c.Resolve<IEventBus>(),
+                c.Resolve<ITimerService>()), Lifetime.Singleton).As<IPoolService>().AsSelf();
 
             // ---- UI(Phase 3a)----
             // UIService 同时实现 IUIService(门面)与 ITickable(返回键检测)。
@@ -96,7 +110,10 @@ namespace EasyFramework
 
             // ---- Audio(Phase 3b)----
             // AudioService : ITickable,以 AsSelf 注册便于 RootLifetimeScope 取出挂 Tick。
-            builder.Register<AudioService>(Lifetime.Singleton).As<IAudioService>().AsSelf();
+            // 工厂 lambda 显式走 1 参生产构造:AudioService 另有一个 internal(IAssetService,Func<float>)
+            // 测试构造,VContainer 自动选最长构造会去解析未注册的 Func<float> 而失败(与上方 PoolService 同因)。
+            builder.Register<AudioService>(c => new AudioService(c.Resolve<IAssetService>()),
+                Lifetime.Singleton).As<IAudioService>().AsSelf();
 
             // ---- Input(Phase 3b)----
             builder.Register<InputService>(Lifetime.Singleton).As<IInputService>().AsSelf();
@@ -153,6 +170,13 @@ namespace EasyFramework
 #endif
             builder.Register<IAPService>(Lifetime.Singleton).As<IIAPService>().AsSelf();
             builder.Register<IAPBootTask>(Lifetime.Singleton).As<IBootTask>();
+
+            // ---- ContentUpdate(资源热更新)----
+            // 真实实现直接转发 Addressables 静态 API;单测全部用 FakeAddressablesCatalogGateway 替身。
+            builder.Register<IAddressablesCatalogGateway, AddressablesCatalogGateway>(Lifetime.Singleton);
+            builder.Register<ContentUpdateService>(Lifetime.Singleton)
+                .As<IContentUpdateService>().AsSelf();
+            builder.Register<ContentUpdateBootTask>(Lifetime.Singleton).As<IBootTask>();
         }
 
         static SaveProfile CreateDefaultSaveProfile()

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 using EasyFramework.Core.Events;
 using EasyFramework.Core.Pooling;
+using EasyFramework.Core.Timing;
 using EasyFramework.Services.Assets;
 using EasyFramework.Services.Scenes;
 using UnityEngine;
@@ -14,19 +15,70 @@ namespace EasyFramework.Services.Pooling
         /// <summary>EditMode 测试可替换为 Object.DestroyImmediate;运行时为 Object.Destroy。</summary>
         internal static Action<GameObject> DestroyHandler = UnityEngine.Object.Destroy;
 
+        /// <summary>闲置缩容扫描周期(秒)。默认 10 秒,足够低频不影响性能。</summary>
+        const float DefaultScanIntervalSeconds = 10f;
+
         readonly IAssetService _assets;
+        readonly ITimerService _timer;
+        readonly Func<float> _now;
         readonly IDisposable _sceneUnloadSub;
+        readonly TimerHandle _scanTimerHandle;
         readonly Dictionary<string, Stack<GameObject>> _idle = new();
         readonly HashSet<GameObject> _active = new();
         readonly Dictionary<GameObject, IPoolable[]> _poolablesCache = new();
 
+        // 闲置缩容:默认关闭(不调用 SetIdleTimeout 则这两个字典恒为空,行为与缩容功能上线前完全一致)。
+        readonly Dictionary<string, float> _idleTimeoutSeconds = new();
+        readonly Dictionary<GameObject, float> _idleSince = new();
+
         GameObject _root;
         GameObject Root => _root != null ? _root : (_root = new GameObject("[Pools]"));
 
-        public PoolService(IAssetService assets, IEventBus events)
+        /// <summary>生产构造:时间源默认 Time.realtimeSinceStartup。</summary>
+        public PoolService(IAssetService assets, IEventBus events, ITimerService timer = null)
+            : this(assets, events, timer, () => Time.realtimeSinceStartup) { }
+
+        /// <summary>测试构造:可注入时间源。</summary>
+        internal PoolService(IAssetService assets, IEventBus events, ITimerService timer, Func<float> nowProvider)
         {
             _assets = assets;
+            _timer = timer;
+            _now = nowProvider;
             _sceneUnloadSub = events.Subscribe<SceneWillUnloadEvent>(_ => ClearAll());
+            if (_timer != null)
+                _scanTimerHandle = _timer.Schedule(DefaultScanIntervalSeconds, ScanIdleTimeouts, repeat: true);
+        }
+
+        /// <summary>
+        /// 按 key 开启/调整闲置自动缩容:该 key 下的实例闲置超过 idleTimeoutSeconds 秒后,
+        /// 下一次缩容扫描会销毁并从池中移除。传 null 或 0 关闭该 key 的缩容(默认即为关闭)。
+        /// 不影响现有调用方——不调用本方法时行为与缩容功能上线前完全一致。
+        /// </summary>
+        public void SetIdleTimeout(string key, float? idleTimeoutSeconds)
+        {
+            if (idleTimeoutSeconds.HasValue && idleTimeoutSeconds.Value > 0f)
+            {
+                _idleTimeoutSeconds[key] = idleTimeoutSeconds.Value;
+            }
+            else
+            {
+                _idleTimeoutSeconds.Remove(key);
+
+                // 清除该 key 下已记录的 _idleSince 时间戳,避免日后重新开启缩容时
+                // 沿用陈旧时间戳导致实例被立即误杀(而不是获得全新的闲置宽限期)。
+                // SetIdleTimeout 是配置期调用,预期低频,这里的 O(n) 扫描是可接受的代价。
+                List<GameObject> staleKeys = null;
+                foreach (var go in _idleSince.Keys)
+                {
+                    if (go == null) continue;
+                    var marker = go.GetComponent<PooledMarker>();
+                    if (marker != null && marker.Key == key)
+                        (staleKeys ??= new List<GameObject>()).Add(go);
+                }
+                if (staleKeys != null)
+                    foreach (var go in staleKeys)
+                        _idleSince.Remove(go);
+            }
         }
 
         public async UniTask PrewarmAsync(string key, int count)
@@ -49,6 +101,7 @@ namespace EasyFramework.Services.Pooling
             if (stack.Count > 0)
             {
                 go = stack.Pop();
+                _idleSince.Remove(go);
             }
             else
             {
@@ -85,6 +138,9 @@ namespace EasyFramework.Services.Pooling
             instance.SetActive(false);
             instance.transform.SetParent(Root.transform, false);
             GetStack(marker.Key).Push(instance);
+
+            if (_idleTimeoutSeconds.ContainsKey(marker.Key))
+                _idleSince[instance] = _now();
         }
 
         Stack<GameObject> GetStack(string key)
@@ -109,6 +165,51 @@ namespace EasyFramework.Services.Pooling
             return arr;
         }
 
+        /// <summary>定时器周期回调:扫描 _idleSince,销毁超过各自 key 的 idleTimeoutSeconds 的实例。</summary>
+        void ScanIdleTimeouts()
+        {
+            if (_idleSince.Count == 0) return;
+
+            var now = _now();
+            List<GameObject> toDestroy = null;
+            foreach (var kv in _idleSince)
+            {
+                var go = kv.Key;
+                if (go == null) continue; // 已被外部销毁,交给下面的清理兜底
+                var marker = go.GetComponent<PooledMarker>();
+                if (marker == null || !_idleTimeoutSeconds.TryGetValue(marker.Key, out var timeout))
+                    continue;
+                if (now - kv.Value < timeout) continue;
+
+                (toDestroy ??= new List<GameObject>()).Add(go);
+            }
+
+            if (toDestroy == null) return;
+
+            foreach (var go in toDestroy)
+            {
+                var marker = go.GetComponent<PooledMarker>();
+                if (marker != null && _idle.TryGetValue(marker.Key, out var stack))
+                {
+                    // Stack 不支持随机移除,重建剩余元素(缩容是低频操作,重建成本可忽略)。
+                    // stack 的 foreach 枚举顺序是出栈顺序(栈顶在前,即最近入栈的在前)。
+                    // 先按这个顺序收集幸存元素(此时列表顺序=原栈顶到栈底),
+                    // 再按列表的逆序(栈底到栈顶)依次 Push,才能让原本更靠近栈顶的
+                    // 幸存元素重新回到新栈的顶部,保持原有相对 LIFO 顺序不变。
+                    var remaining = new List<GameObject>();
+                    foreach (var item in stack)
+                        if (!ReferenceEquals(item, go))
+                            remaining.Add(item);
+                    stack.Clear();
+                    for (var i = remaining.Count - 1; i >= 0; i--)
+                        stack.Push(remaining[i]);
+                }
+                _idleSince.Remove(go);
+                _poolablesCache.Remove(go);
+                DestroyHandler(go);
+            }
+        }
+
         void ClearAll()
         {
             foreach (var stack in _idle.Values)
@@ -122,6 +223,7 @@ namespace EasyFramework.Services.Pooling
                     }
                 }
             _idle.Clear();
+            _idleSince.Clear();
             foreach (var go in _active)
                 if (go != null)
                 {
@@ -135,6 +237,7 @@ namespace EasyFramework.Services.Pooling
         public void Dispose()
         {
             _sceneUnloadSub?.Dispose();
+            _timer?.Cancel(_scanTimerHandle);
             ClearAll();
             if (_root != null) DestroyHandler(_root);
         }

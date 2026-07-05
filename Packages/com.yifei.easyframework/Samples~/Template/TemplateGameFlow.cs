@@ -46,6 +46,14 @@ namespace EasyFramework.Template
             public override UniTask Enter()
             {
                 // 扩展点:加载关卡场景、G.UI.ShowHudAsync<GameHud>()、开始计时/生成对象。
+
+                // ContentUpdate 最小接入示例(手动验证用,需要真实 Addressables Remote Group 配置):
+                // 订阅 ContentAvailableEvent 后自行决定何时下载——框架不预设"立即下载/仅 WiFi/提示用户"策略。
+                // G.Events.Subscribe<EasyFramework.Services.ContentUpdate.ContentAvailableEvent>(async _ =>
+                // {
+                //     var applied = await G.ContentUpdate.DownloadAndApplyAsync();
+                //     if (applied) { /* 提示玩家重启关卡以应用新内容 */ }
+                // });
                 return UniTask.CompletedTask;
             }
 
