@@ -35,18 +35,34 @@ namespace EasyFramework.Tests
                 public Sub(System.Action d) => _dispose = d;
                 public void Dispose() => _dispose();
             }
+
+            public List<T> PublishedOf<T>()
+            {
+                var result = new List<T>();
+                foreach (var p in Published)
+                    if (p is T t) result.Add(t);
+                return result;
+            }
         }
 
         sealed class FakeAddressablesCatalogGateway : IAddressablesCatalogGateway
         {
             public List<string> CatalogsWithUpdates = new();
             public bool UpdateSucceeds = true;
+            public int CheckCallCount;
+            public int UpdateCallCount;
 
             public UniTask<List<string>> CheckForCatalogUpdatesAsync()
-                => UniTask.FromResult(CatalogsWithUpdates);
+            {
+                CheckCallCount++;
+                return UniTask.FromResult(CatalogsWithUpdates);
+            }
 
             public UniTask<bool> UpdateCatalogsAsync(List<string> catalogKeys, IProgress<float> progress)
-                => UniTask.FromResult(UpdateSucceeds);
+            {
+                UpdateCallCount++;
+                return UniTask.FromResult(UpdateSucceeds);
+            }
         }
 
         [Test]
@@ -55,6 +71,112 @@ namespace EasyFramework.Tests
             var info = new ContentUpdateInfo(true, 1024L);
             Assert.IsTrue(info.IsAvailable);
             Assert.AreEqual(1024L, info.EstimatedDownloadSizeBytes);
+        }
+
+        [Test]
+        public void CheckAsync_UpdateAvailable_ReturnsAvailableAndPublishesEvent()
+        {
+            var gateway = new FakeAddressablesCatalogGateway { CatalogsWithUpdates = new List<string> { "catalog_001" } };
+            var bus = new FakeBus();
+            var svc = new ContentUpdateService(gateway, bus);
+
+            var info = svc.CheckAsync().GetAwaiter().GetResult();
+
+            Assert.IsTrue(info.IsAvailable);
+            Assert.AreEqual(-1L, info.EstimatedDownloadSizeBytes);
+            Assert.IsTrue(svc.HasChecked);
+            var published = bus.PublishedOf<ContentAvailableEvent>();
+            Assert.AreEqual(1, published.Count);
+            Assert.IsTrue(published[0].Info.IsAvailable);
+        }
+
+        [Test]
+        public void CheckAsync_NoUpdate_ReturnsNotAvailableAndPublishesNoEvent()
+        {
+            var gateway = new FakeAddressablesCatalogGateway { CatalogsWithUpdates = new List<string>() };
+            var bus = new FakeBus();
+            var svc = new ContentUpdateService(gateway, bus);
+
+            var info = svc.CheckAsync().GetAwaiter().GetResult();
+
+            Assert.IsFalse(info.IsAvailable);
+            Assert.IsTrue(svc.HasChecked);
+            Assert.AreEqual(0, bus.PublishedOf<ContentAvailableEvent>().Count);
+        }
+
+        [Test]
+        public void DownloadAndApplyAsync_Success_PublishesAppliedEventAndReturnsTrue()
+        {
+            var gateway = new FakeAddressablesCatalogGateway
+            {
+                CatalogsWithUpdates = new List<string> { "catalog_001" },
+                UpdateSucceeds = true,
+            };
+            var bus = new FakeBus();
+            var svc = new ContentUpdateService(gateway, bus);
+            svc.CheckAsync().GetAwaiter().GetResult();
+
+            var result = svc.DownloadAndApplyAsync().GetAwaiter().GetResult();
+
+            Assert.IsTrue(result);
+            Assert.AreEqual(1, bus.PublishedOf<ContentUpdateAppliedEvent>().Count);
+            Assert.AreEqual(0, bus.PublishedOf<ContentUpdateFailedEvent>().Count);
+        }
+
+        [Test]
+        public void DownloadAndApplyAsync_Failure_PublishesFailedEventReturnsFalseNoThrow()
+        {
+            var gateway = new FakeAddressablesCatalogGateway
+            {
+                CatalogsWithUpdates = new List<string> { "catalog_001" },
+                UpdateSucceeds = false,
+            };
+            var bus = new FakeBus();
+            var svc = new ContentUpdateService(gateway, bus);
+            svc.CheckAsync().GetAwaiter().GetResult();
+
+            bool result = false;
+            Assert.DoesNotThrow(() => result = svc.DownloadAndApplyAsync().GetAwaiter().GetResult());
+
+            Assert.IsFalse(result);
+            Assert.AreEqual(1, bus.PublishedOf<ContentUpdateFailedEvent>().Count);
+            Assert.AreEqual(0, bus.PublishedOf<ContentUpdateAppliedEvent>().Count);
+        }
+
+        [Test]
+        public void DownloadAndApplyAsync_WithoutPriorCheck_ChecksInternallyFirst()
+        {
+            var gateway = new FakeAddressablesCatalogGateway
+            {
+                CatalogsWithUpdates = new List<string> { "catalog_001" },
+                UpdateSucceeds = true,
+            };
+            var bus = new FakeBus();
+            var svc = new ContentUpdateService(gateway, bus);
+
+            Assert.IsFalse(svc.HasChecked);
+            var result = svc.DownloadAndApplyAsync().GetAwaiter().GetResult();
+
+            Assert.IsTrue(result);
+            Assert.IsTrue(svc.HasChecked);
+            Assert.AreEqual(1, gateway.CheckCallCount);
+            Assert.AreEqual(1, gateway.UpdateCallCount);
+        }
+
+        [Test]
+        public void DownloadAndApplyAsync_NoUpdateAvailable_ReturnsFalseWithoutCallingUpdate()
+        {
+            var gateway = new FakeAddressablesCatalogGateway { CatalogsWithUpdates = new List<string>() };
+            var bus = new FakeBus();
+            var svc = new ContentUpdateService(gateway, bus);
+            svc.CheckAsync().GetAwaiter().GetResult();
+
+            var result = svc.DownloadAndApplyAsync().GetAwaiter().GetResult();
+
+            Assert.IsFalse(result);
+            Assert.AreEqual(0, gateway.UpdateCallCount);
+            Assert.AreEqual(0, bus.PublishedOf<ContentUpdateAppliedEvent>().Count);
+            Assert.AreEqual(0, bus.PublishedOf<ContentUpdateFailedEvent>().Count);
         }
     }
 }
