@@ -189,4 +189,50 @@ namespace EasyFramework.Tests
             Assert.IsNotNull(gateway);
         }
     }
+
+    public class ContentUpdateBootTaskTests
+    {
+        sealed class FakeBus : EasyFramework.Core.Events.IEventBus
+        {
+            public void Publish<T>(T evt) { }
+            public System.IDisposable Subscribe<T>(System.Action<T> handler) => new NoopSub();
+            sealed class NoopSub : System.IDisposable { public void Dispose() { } }
+        }
+
+        sealed class FakeAddressablesCatalogGateway : IAddressablesCatalogGateway
+        {
+            public List<string> CatalogsWithUpdates = new();
+            public UniTask<List<string>> CheckForCatalogUpdatesAsync() => UniTask.FromResult(CatalogsWithUpdates);
+            public UniTask<bool> UpdateCatalogsAsync(List<string> catalogKeys, IProgress<float> progress)
+                => UniTask.FromResult(true);
+        }
+
+        [Test]
+        public void Priority_Is20()
+        {
+            var svc = new ContentUpdateService(new FakeAddressablesCatalogGateway(), new FakeBus());
+            var task = new ContentUpdateBootTask(svc);
+            Assert.AreEqual(20, task.Priority);
+        }
+
+        [Test]
+        public void IsCritical_IsFalse()
+        {
+            var svc = new ContentUpdateService(new FakeAddressablesCatalogGateway(), new FakeBus());
+            var task = new ContentUpdateBootTask(svc);
+            Assert.IsFalse(task.IsCritical);
+        }
+
+        [Test]
+        public void InitializeAsync_CallsCheckAsyncOnce()
+        {
+            var gateway = new FakeAddressablesCatalogGateway { CatalogsWithUpdates = new List<string> { "c" } };
+            var svc = new ContentUpdateService(gateway, new FakeBus());
+            var task = new ContentUpdateBootTask(svc);
+
+            Assert.IsFalse(svc.HasChecked);
+            task.InitializeAsync(System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+            Assert.IsTrue(svc.HasChecked);
+        }
+    }
 }
