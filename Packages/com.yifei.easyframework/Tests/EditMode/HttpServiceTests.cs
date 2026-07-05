@@ -4,6 +4,7 @@ using Cysharp.Threading.Tasks;
 using EasyFramework.Services.Network;
 using Newtonsoft.Json;
 using NUnit.Framework;
+using VContainer;
 
 namespace EasyFramework.Tests
 {
@@ -123,6 +124,43 @@ namespace EasyFramework.Tests
 
             Assert.IsNotNull(ex);
             Assert.AreEqual(3, transport.Calls.Count); // 1 次初始 + 2 次重试,全部耗尽
+        }
+
+        static EasyFramework.FrameworkOptions MakeFrameworkOptions()
+            => new EasyFramework.FrameworkOptions
+            {
+                SaveDirectory = System.IO.Path.Combine(
+                    System.IO.Path.GetTempPath(), "ef_http_" + System.Guid.NewGuid().ToString("N")),
+            };
+
+        [Test]
+        public void FrameworkInstaller_RegistersHttpService_ResolvableAsIHttpService()
+        {
+            var builder = new VContainer.ContainerBuilder();
+            EasyFramework.FrameworkInstaller.Install(builder, MakeFrameworkOptions());
+            using var container = builder.Build();
+
+            var resolved = container.Resolve<IHttpService>();
+
+            Assert.IsInstanceOf<HttpService>(resolved);
+        }
+
+        [Test]
+        public void G_Http_IsExposedAsGHttp()
+        {
+            var builder = new VContainer.ContainerBuilder();
+            EasyFramework.FrameworkInstaller.Install(builder, MakeFrameworkOptions());
+            using var container = builder.Build();
+
+            EasyFramework.G.Initialize(container);
+            try
+            {
+                Assert.AreSame(container.Resolve<IHttpService>(), EasyFramework.G.Http);
+            }
+            finally
+            {
+                EasyFramework.G.Reset();
+            }
         }
     }
 }

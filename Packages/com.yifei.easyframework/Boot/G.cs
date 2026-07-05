@@ -12,6 +12,7 @@ using EasyFramework.Services.Haptics;
 using EasyFramework.Services.Inputs;
 using EasyFramework.Services.Juice;
 using EasyFramework.Services.Localization;
+using EasyFramework.Services.Network;
 using EasyFramework.Services.Pooling;
 using EasyFramework.Services.Saves;
 using EasyFramework.Services.Scenes;
@@ -29,6 +30,7 @@ namespace EasyFramework
         public static ISceneService Scene { get; private set; }
         public static ISaveService Save { get; private set; }
         public static IConfigService Config { get; private set; }
+        public static IHttpService Http { get; private set; }
         public static IContentUpdateService ContentUpdate { get; private set; }
         public static IPoolService Pool { get; private set; }
 
@@ -58,6 +60,7 @@ namespace EasyFramework
             Scene = resolver.Resolve<ISceneService>();
             Save = resolver.Resolve<ISaveService>();
             Config = resolver.Resolve<IConfigService>();
+            Http = resolver.Resolve<IHttpService>();
             ContentUpdate = resolver.Resolve<IContentUpdateService>();
             Pool = resolver.Resolve<IPoolService>();
 
@@ -89,6 +92,7 @@ namespace EasyFramework
             Scene = null;
             Save = null;
             Config = null;
+            Http = null;
             ContentUpdate = null;
             Pool = null;
 
