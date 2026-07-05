@@ -2,6 +2,23 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.2.0] - 2026-07-05
+
+### Added
+
+- `IContentUpdateService`:基于 Addressables 官方 Remote Content Update 机制的资源热更新服务,启动时静默检查、`ContentAvailableEvent` 通知业务层决定是否下载,`G.ContentUpdate` 挂载。
+- `IHttpService`:通用 HTTP 基础设施(GET/POST、超时、重试、JSON 序列化走 Newtonsoft),`G.Http` 挂载。
+- `IMultiplayerService` / `IMultiplayerProvider`:可选联机适配层,只定义连接生命周期契约,不内置任何传输协议;不进 `FrameworkInstaller`/`G`,由需要联机的具体游戏自行注册实现。
+- `IEventBus` 递归深度保护,防止事件互相触发导致的死循环拖垮主循环。
+- `GameBootstrap` 逐任务耗时日志(开发模式下超阈值打印),便于定位启动变慢的具体 `IBootTask`。
+- `PoolService` 支持按 key 配置闲置超时自动销毁(默认关闭,不影响现有行为)。
+- 本地化编辑器批量漏翻译检测工具。
+- `AudioService` 同音效并发限流,避免高频触发同一音效造成音量堆叠。
+
+### Notes
+
+- 明确不引入代码热更新(HybridCLR 等):经评估违反 Apple App Store Review Guideline 2.5.2,存在开发者账号级别的下架风险,风险与收益不成比例(详见 `docs/superpowers/specs/2026-07-05-content-update-service-design.md` 背景说明)。
+
 ## [0.1.0] - 2026-06-13
 
 ### Added
