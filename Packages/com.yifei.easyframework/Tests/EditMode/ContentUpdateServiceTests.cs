@@ -179,4 +179,14 @@ namespace EasyFramework.Tests
             Assert.AreEqual(0, bus.PublishedOf<ContentUpdateFailedEvent>().Count);
         }
     }
+
+    public class AddressablesCatalogGatewayTests
+    {
+        [Test]
+        public void ImplementsIAddressablesCatalogGateway()
+        {
+            IAddressablesCatalogGateway gateway = new AddressablesCatalogGateway();
+            Assert.IsNotNull(gateway);
+        }
+    }
 }
