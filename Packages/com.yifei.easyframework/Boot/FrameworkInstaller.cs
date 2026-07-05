@@ -83,8 +83,14 @@ namespace EasyFramework
                 Lifetime.Singleton).As<IConfigService>().AsSelf();
             builder.Register<ConfigBootTask>(Lifetime.Singleton).As<IBootTask>();
 
-            // ---- Pool(Phase 2)----
-            builder.Register<PoolService>(Lifetime.Singleton).As<IPoolService>().AsSelf();
+            // ---- Pool(Phase 2; idle auto-shrink added later)----
+            // 工厂 lambda 显式走 3 参生产构造:PoolService 另有一个 internal(IAssetService,IEventBus,
+            // ITimerService,Func<float>)测试构造,VContainer 自动选最长构造会去解析未注册的 Func<float> 而失败
+            // (与上方 ISceneTransition/SceneService、AdsService 同因)。
+            builder.Register<PoolService>(c => new PoolService(
+                c.Resolve<IAssetService>(),
+                c.Resolve<IEventBus>(),
+                c.Resolve<ITimerService>()), Lifetime.Singleton).As<IPoolService>().AsSelf();
 
             // ---- UI(Phase 3a)----
             // UIService 同时实现 IUIService(门面)与 ITickable(返回键检测)。
@@ -96,7 +102,10 @@ namespace EasyFramework
 
             // ---- Audio(Phase 3b)----
             // AudioService : ITickable,以 AsSelf 注册便于 RootLifetimeScope 取出挂 Tick。
-            builder.Register<AudioService>(Lifetime.Singleton).As<IAudioService>().AsSelf();
+            // 工厂 lambda 显式走 1 参生产构造:AudioService 另有一个 internal(IAssetService,Func<float>)
+            // 测试构造,VContainer 自动选最长构造会去解析未注册的 Func<float> 而失败(与上方 PoolService 同因)。
+            builder.Register<AudioService>(c => new AudioService(c.Resolve<IAssetService>()),
+                Lifetime.Singleton).As<IAudioService>().AsSelf();
 
             // ---- Input(Phase 3b)----
             builder.Register<InputService>(Lifetime.Singleton).As<IInputService>().AsSelf();
