@@ -17,9 +17,15 @@ namespace EasyFramework.Services.ContentUpdate
         public async UniTask<List<string>> CheckForCatalogUpdatesAsync()
         {
             var handle = Addressables.CheckForCatalogUpdates(false);
-            var result = await handle.ToUniTask();
-            Addressables.Release(handle);
-            return result ?? new List<string>();
+            try
+            {
+                var result = await handle.ToUniTask();
+                return result ?? new List<string>();
+            }
+            finally
+            {
+                Addressables.Release(handle);
+            }
         }
 
         public async UniTask<bool> UpdateCatalogsAsync(List<string> catalogKeys, IProgress<float> progress)
@@ -27,12 +33,18 @@ namespace EasyFramework.Services.ContentUpdate
             // Addressables.UpdateCatalogs 返回 AsyncOperationHandle<List<IResourceLocator>>(更新后的 locator 列表),
             // 而非 bool;成功与否通过 handle.Status 判断,而不是 Result 本身。
             AsyncOperationHandle<List<IResourceLocator>> handle = Addressables.UpdateCatalogs(catalogKeys, false);
-            await handle.ToUniTask(progress: progress);
-            progress?.Report(1f);
+            try
+            {
+                await handle.ToUniTask(progress: progress);
 
-            var succeeded = handle.Status == AsyncOperationStatus.Succeeded;
-            Addressables.Release(handle);
-            return succeeded;
+                var succeeded = handle.Status == AsyncOperationStatus.Succeeded;
+                if (succeeded) progress?.Report(1f);
+                return succeeded;
+            }
+            finally
+            {
+                Addressables.Release(handle);
+            }
         }
     }
 }
