@@ -7,6 +7,7 @@ using EasyFramework.Services.Assets;
 using EasyFramework.Services.Audio;
 using EasyFramework.Services.Cameras;
 using EasyFramework.Services.Configs;
+using EasyFramework.Services.ContentUpdate;
 using EasyFramework.Services.Haptics;
 using EasyFramework.Services.Inputs;
 using EasyFramework.Services.Juice;
@@ -28,6 +29,7 @@ namespace EasyFramework
         public static ISceneService Scene { get; private set; }
         public static ISaveService Save { get; private set; }
         public static IConfigService Config { get; private set; }
+        public static IContentUpdateService ContentUpdate { get; private set; }
         public static IPoolService Pool { get; private set; }
 
         // Phase 3a UI
@@ -56,6 +58,7 @@ namespace EasyFramework
             Scene = resolver.Resolve<ISceneService>();
             Save = resolver.Resolve<ISaveService>();
             Config = resolver.Resolve<IConfigService>();
+            ContentUpdate = resolver.Resolve<IContentUpdateService>();
             Pool = resolver.Resolve<IPoolService>();
 
             UI = resolver.Resolve<IUIService>();
@@ -86,6 +89,7 @@ namespace EasyFramework
             Scene = null;
             Save = null;
             Config = null;
+            ContentUpdate = null;
             Pool = null;
 
             UI = null;

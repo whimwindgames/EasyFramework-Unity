@@ -9,6 +9,7 @@ using EasyFramework.Services.Assets;
 using EasyFramework.Services.Audio;
 using EasyFramework.Services.Cameras;
 using EasyFramework.Services.Configs;
+using EasyFramework.Services.ContentUpdate;
 using EasyFramework.Services.Haptics;
 using EasyFramework.Services.Inputs;
 using EasyFramework.Services.Juice;
@@ -162,6 +163,13 @@ namespace EasyFramework
 #endif
             builder.Register<IAPService>(Lifetime.Singleton).As<IIAPService>().AsSelf();
             builder.Register<IAPBootTask>(Lifetime.Singleton).As<IBootTask>();
+
+            // ---- ContentUpdate(资源热更新)----
+            // 真实实现直接转发 Addressables 静态 API;单测全部用 FakeAddressablesCatalogGateway 替身。
+            builder.Register<IAddressablesCatalogGateway, AddressablesCatalogGateway>(Lifetime.Singleton);
+            builder.Register<ContentUpdateService>(Lifetime.Singleton)
+                .As<IContentUpdateService>().AsSelf();
+            builder.Register<ContentUpdateBootTask>(Lifetime.Singleton).As<IBootTask>();
         }
 
         static SaveProfile CreateDefaultSaveProfile()

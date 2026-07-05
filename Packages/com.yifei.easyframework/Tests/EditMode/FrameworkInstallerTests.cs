@@ -8,6 +8,7 @@ using EasyFramework.Services.Assets;
 using EasyFramework.Services.Audio;
 using EasyFramework.Services.Cameras;
 using EasyFramework.Services.Configs;
+using EasyFramework.Services.ContentUpdate;
 using EasyFramework.Services.Haptics;
 using EasyFramework.Services.Inputs;
 using EasyFramework.Services.Juice;
@@ -162,6 +163,7 @@ namespace EasyFramework.Tests
             Assert.IsNull(EasyFramework.G.Ads);
             Assert.IsNull(EasyFramework.G.IAP);
             Assert.IsNull(EasyFramework.G.Analytics);
+            Assert.IsNull(EasyFramework.G.ContentUpdate);
         }
 
         [Test]
@@ -181,6 +183,21 @@ namespace EasyFramework.Tests
             Assert.AreSame(c.Resolve<IAdsService>(), EasyFramework.G.Ads);
             Assert.AreSame(c.Resolve<IIAPService>(), EasyFramework.G.IAP);
             Assert.AreSame(c.Resolve<IAnalyticsService>(), EasyFramework.G.Analytics);
+        }
+
+        [Test]
+        public void Install_ResolvesContentUpdateService()
+        {
+            var c = Build();
+            Assert.NotNull(c.Resolve<IContentUpdateService>());
+        }
+
+        [Test]
+        public void GFacade_BindsContentUpdateService()
+        {
+            var c = Build();
+            EasyFramework.G.Initialize(c);
+            Assert.AreSame(c.Resolve<IContentUpdateService>(), EasyFramework.G.ContentUpdate);
         }
     }
 }
