@@ -159,9 +159,9 @@ OnSetup(args)  →  PlayEnter()  →  (显示)  →  PlayExit()  →  (销毁)
 
 | 槽 | 默认(编辑器 / 测试) | 接入真实 SDK |
 |---|---|---|
-| 广告 `IAdsProvider` | 编辑器/开发包 `Fake`;正式包 MAX | 配置 `options.MaxAdsSettings`;广告位缺失时正式包安全降级为 `Unavailable` |
-| 内购 `IIAPProvider` | 编辑器/开发包 `Fake`;正式包 Unity IAP 5 | `options.IAPProviderFactory = ...`;商品类型由 `ProductCatalog` 映射 |
-| 收据 `IIAPReceiptValidator` | 编辑器/开发包放行 Fake;正式包客户端结构校验 | 默认无服务端;需要时通过 `options.IAPReceiptValidatorFactory` 替换为服务端验签 |
+| 广告 `IAdsProvider` | 编辑器/开发包 `Fake`;正式包 `Unavailable` | 可选安装 `com.yifei.easyframework.max`,调用 `options.UseAppLovinMax(...)` |
+| 内购 `IIAPProvider` | 编辑器/开发包 `Fake`;正式包 `Unavailable` | 可选安装 `com.yifei.easyframework.iap`,调用 `options.UseUnityIAP()` |
+| 收据 `IIAPReceiptValidator` | 编辑器/开发包放行 Fake;正式包拒绝 | Unity IAP 扩展默认客户端确认,也可传服务器 validator factory |
 | 统计后端 | 编辑器/开发包 Console;正式包空列表 | `options.AnalyticsBackendsFactory = ...` |
 | 远程配置 | `NoopRemoteConfigProvider` | `options.RemoteConfigProviderFactory = ...` |
 | 存档后端 `ISaveBackend`(云存档,v1 未做) | 本地文件 | 预留接口 |
@@ -171,21 +171,10 @@ public sealed class MyRootLifetimeScope : RootLifetimeScope
 {
     protected override void ConfigureFrameworkOptions(FrameworkOptions options)
     {
-        options.MaxAdsSettings = new MaxAdsSettings
-        {
-            Android = new MaxAdsPlatformSettings
-            {
-                RewardedAdUnitId = "ANDROID_REWARDED_ID",
-                InterstitialAdUnitId = "ANDROID_INTERSTITIAL_ID",
-                BannerAdUnitId = "ANDROID_BANNER_ID",
-            },
-            IOS = new MaxAdsPlatformSettings
-            {
-                RewardedAdUnitId = "IOS_REWARDED_ID",
-                InterstitialAdUnitId = "IOS_INTERSTITIAL_ID",
-                BannerAdUnitId = "IOS_BANNER_ID",
-            },
-        };
+        // 安装 MAX 扩展后:
+        // options.UseAppLovinMax(new MaxAdsSettings { ... });
+        // 安装 Unity IAP 扩展后(当前无服务端验签):
+        // options.UseUnityIAP();
         options.RemoteConfigProviderFactory = resolver => new MyRemoteConfigProvider();
         options.AnalyticsBackendsFactory = resolver =>
             new IAnalyticsBackend[] { new MyAnalyticsBackend() };
@@ -193,10 +182,12 @@ public sealed class MyRootLifetimeScope : RootLifetimeScope
 }
 ```
 
-MAX Core SDK 已由 UPM 依赖固定为 8.6.4。上线前需在 **AppLovin > Integration Manager**
-填写 SDK Key、安装实际参与竞价的广告网络 Adapter,并完成隐私/ATT 流程;Android 开启 Jetifier,
-iOS 构建机安装 CocoaPods。框架只在收到 MAX 的 `OnAdReceivedRewardEvent` 后返回奖励完成,
-关闭但未获奖返回 `Skipped`;加载失败按 2~64 秒指数退避。
+核心包不依赖 MAX 或 Unity Purchasing。两个独立扩展仓库分别为:
+
+- `https://git.whimwindgames.cn/gitadmin/easyframework-max.git`
+- `https://git.whimwindgames.cn/gitadmin/easyframework-iap.git`
+
+只安装实际需要的扩展,即可避免未使用 SDK 增大包体、引入原生依赖或影响构建。
 
 IAP 的 `ProcessPurchase` 会保持 Pending。交易先写入 `iap-transactions.json`,通过客户端交易
 结构/收据存在性校验并由
@@ -232,7 +223,7 @@ public static void SetHighScore(int value) { /* ... */ }
 
 | 层 | 策略 |
 |---|---|
-| Core / 服务业务逻辑 | 213 项 EditMode 单测(状态机、对象池、存档迁移、事件、UI、HTTP 幂等重试、MAX 回调、IAP Pending/补单等) |
+| Core / 服务业务逻辑 | 209 项 EditMode 单测(状态机、对象池、存档迁移、事件、UI、HTTP 幂等重试、IAP Pending/补单等) |
 | 运行时生命周期 | 3 项 PlayMode 冒烟(淡出遮罩、音频宿主释放、正式广告安全关闭) |
 | SDK 真机路径 | Fake 覆盖业务流转 + iOS/Android 商店沙盒与广告测试设备验收 |
 

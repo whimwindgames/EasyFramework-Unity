@@ -7,7 +7,7 @@ namespace EasyFramework.Monetization.Ads
 
     public enum BannerPosition { Top, Bottom }
 
-    /// <summary>SDK 适配点。框架内置 Fake / MAX / Unavailable,也可在根 LifetimeScope 替换。</summary>
+    /// <summary>SDK 适配点。核心内置 Fake / Unavailable,真实广告由独立扩展包接入。</summary>
     public interface IAdsProvider
     {
         UniTask InitializeAsync(CancellationToken ct);

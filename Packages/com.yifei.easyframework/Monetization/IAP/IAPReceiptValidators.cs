@@ -12,7 +12,7 @@ namespace EasyFramework.Monetization.IAP
     }
 
     /// <summary>
-    /// 无游戏服务端时的客户端确认模式。只接受本次 Unity IAP 商店回调中包含完整标识和收据的交易,
+    /// 无游戏服务端时的客户端确认模式。只接受本次商店回调中包含完整标识和收据的交易,
     /// 不执行密码学验签。交易日志、TransactionId 幂等发奖和商店 Pending/Confirm 顺序仍然生效。
     /// </summary>
     public sealed class ClientOnlyIAPReceiptValidator : IIAPReceiptValidator

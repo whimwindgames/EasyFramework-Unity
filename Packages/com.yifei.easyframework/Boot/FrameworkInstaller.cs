@@ -50,15 +50,10 @@ namespace EasyFramework
         /// </summary>
         public Func<IObjectResolver, IRemoteConfigProvider> RemoteConfigProviderFactory;
         /// <summary>
-        /// 广告适配器工厂。编辑器/开发包默认使用 Fake;正式包未配置时使用安全关闭实现,
-        /// 永远不会把奖励广告报告为完成。为 null 且配置了 MaxAdsSettings 时,正式包使用 MAX。
+        /// 广告适配器工厂。编辑器/开发包默认使用 Fake;正式包未安装广告扩展时安全关闭,
+        /// 永远不会把奖励广告报告为完成。
         /// </summary>
         public Func<IObjectResolver, IAdsProvider> AdsProviderFactory;
-        /// <summary>
-        /// AppLovin MAX SDK Key 与 Android/iOS 广告位。正式包在未自定义 AdsProviderFactory 时使用。
-        /// 广告位缺失时自动降级到 UnavailableAdsProvider。
-        /// </summary>
-        public MaxAdsSettings MaxAdsSettings;
         /// <summary>
         /// 统计后端工厂。编辑器/开发包默认输出到 Console;正式包默认不发送任何数据。
         /// </summary>
@@ -174,8 +169,7 @@ namespace EasyFramework
 
             // ---- Ads(Phase 4)----
             builder.Register<IAdsProvider>(c =>
-                CreateRequired(options.AdsProviderFactory, c,
-                    () => CreateDefaultAdsProvider(options.MaxAdsSettings),
+                CreateRequired(options.AdsProviderFactory, c, CreateDefaultAdsProvider,
                     nameof(options.AdsProviderFactory)), Lifetime.Singleton);
             // 工厂 lambda 显式走 3 参生产构造:AdsService 另有一个 internal(IAdsProvider,IConfigService,
             // IAnalyticsService,Func<float>)测试构造,VContainer 自动选最长构造会去解析未注册的 Func<float> 而失败
@@ -236,14 +230,12 @@ namespace EasyFramework
                 $"FrameworkOptions.{optionName} returned null.");
         }
 
-        static IAdsProvider CreateDefaultAdsProvider(MaxAdsSettings maxSettings)
+        static IAdsProvider CreateDefaultAdsProvider()
         {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             return new FakeAdsProvider();
 #else
-            return maxSettings?.IsConfiguredForCurrentPlatform == true
-                ? new MaxAdsProvider(maxSettings)
-                : new UnavailableAdsProvider();
+            return new UnavailableAdsProvider();
 #endif
         }
 
@@ -261,7 +253,7 @@ namespace EasyFramework
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             return new FakeIAPProvider();
 #else
-            return new UnityIAPProvider();
+            return new UnavailableIAPProvider();
 #endif
         }
 
@@ -270,7 +262,7 @@ namespace EasyFramework
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             return new DevelopmentIAPReceiptValidator();
 #else
-            return new ClientOnlyIAPReceiptValidator();
+            return new UnavailableIAPReceiptValidator();
 #endif
         }
     }

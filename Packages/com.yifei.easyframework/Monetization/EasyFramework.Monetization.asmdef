@@ -6,9 +6,7 @@
     "EasyFramework.Services",
     "UniTask",
     "VContainer",
-    "MessagePipe",
-    "Unity.Purchasing",
-    "MaxSdk.Scripts"
+    "MessagePipe"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],

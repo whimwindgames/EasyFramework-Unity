@@ -6,7 +6,7 @@
 
 ### Security
 
-- 正式广告采用 AppLovin MAX 8.6.4:奖励、插屏和 Banner 共用正式适配器,实现启动预加载、2~64 秒失败退避、关闭后补载和静态回调释放;广告位未配置时安全关闭。
+- 正式包未安装广告或商店扩展时使用 `Unavailable` 实现,不会误发广告奖励或确认内购交易。
 - Unity IAP 升级到 v5 API:交易保持 Pending,先写原子 journal,再验证、幂等发奖并确认;启动补单、恢复购买和重复交易共用同一链路。
 - 无游戏服务端时使用显式 `ClientOnlyIAPReceiptValidator`:只接受带完整交易标识与收据的当前商店回调,拒绝旧版无收据交易;保留随时替换为服务端验签的接口。
 - HTTP POST 默认禁止自动重试;只有显式开启并提供幂等键时才重试。
@@ -27,9 +27,15 @@
 - `LocalizedText` 在运行时晚初始化时会自动绑定;联机服务 Dispose 后正确退订 provider。
 - 存档 profile、迁移推进与反序列化增加校验,损坏 payload 会备份并安全重建。
 
+### Changed
+
+- AppLovin MAX 迁移到独立可选包 `com.yifei.easyframework.max`。
+- Unity IAP 5 商店适配迁移到独立可选包 `com.yifei.easyframework.iap`。
+- 核心包不再依赖 `com.applovin.mediation.ads` 或 `com.unity.purchasing`。
+
 ### Tests
 
-- 213 项 EditMode 与 3 项 PlayMode 冒烟测试。
+- 209 项核心 EditMode 与 3 项 PlayMode 冒烟测试;扩展包另有独立测试。
 - 新增 `scripts/run-unity-tests.sh`,可用于本地或自托管 CI。
 
 ## [0.2.0] - 2026-07-05

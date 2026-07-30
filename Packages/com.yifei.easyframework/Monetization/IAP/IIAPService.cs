@@ -40,7 +40,7 @@ namespace EasyFramework.Monetization.IAP
         public string FailureReason;   // 取消="cancelled", 未初始化="not_initialized" 等
     }
 
-    /// <summary>SDK 适配点(Unity IAP / Fake)。</summary>
+    /// <summary>商店 SDK 适配点。核心提供 Fake / Unavailable,真实商店由扩展包实现。</summary>
     public interface IIAPProvider
     {
         /// <summary>商店在启动/恢复时交付的未确认交易。处理成功前 provider 必须保持 Pending。</summary>
