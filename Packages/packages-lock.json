@@ -1,5 +1,14 @@
 {
   "dependencies": {
+    "com.applovin.mediation.ads": {
+      "version": "8.6.4",
+      "depth": 0,
+      "source": "registry",
+      "dependencies": {
+        "com.google.external-dependency-manager": "1.2.182"
+      },
+      "url": "https://unity.packages.applovin.com"
+    },
     "com.coplaydev.unity-mcp": {
       "version": "https://github.com/CoplayDev/unity-mcp.git?path=/MCPForUnity#78ee5418415953b79c358bfe6355fcc3fde7912b",
       "depth": 0,
@@ -27,6 +36,13 @@
     "com.cysharp.unitask": {
       "version": "2.5.10",
       "depth": 0,
+      "source": "registry",
+      "dependencies": {},
+      "url": "https://package.openupm.com"
+    },
+    "com.google.external-dependency-manager": {
+      "version": "1.2.182",
+      "depth": 1,
       "source": "registry",
       "dependencies": {},
       "url": "https://package.openupm.com"
@@ -431,6 +447,7 @@
         "com.unity.ugui": "2.0.0",
         "com.unity.nuget.newtonsoft-json": "3.2.1",
         "com.unity.purchasing": "5.3.1",
+        "com.applovin.mediation.ads": "8.6.4",
         "com.cysharp.unitask": "2.5.10",
         "jp.hadashikick.vcontainer": "1.16.9",
         "com.cysharp.messagepipe": "1.8.1",

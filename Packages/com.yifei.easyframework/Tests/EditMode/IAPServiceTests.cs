@@ -147,6 +147,38 @@ namespace EasyFramework.Tests
         }
 
         [Test]
+        public void ClientOnlyValidator_AcceptsCompleteStoreTransaction()
+        {
+            var validator = new ClientOnlyIAPReceiptValidator();
+            var result = validator.ValidateAsync(new PurchaseTransaction
+            {
+                ProductId = "coins_100",
+                TransactionId = "transaction-1",
+                Receipt = "{\"Store\":\"GooglePlay\"}",
+            }, CancellationToken.None).GetAwaiter().GetResult();
+
+            Assert.IsTrue(result.IsValid);
+        }
+
+        [TestCase(false, null, "receipt_missing")]
+        [TestCase(true, "legacy", "legacy_receipt_unavailable")]
+        public void ClientOnlyValidator_RejectsUnverifiableTransactions(
+            bool legacy, string receipt, string expectedReason)
+        {
+            var validator = new ClientOnlyIAPReceiptValidator();
+            var result = validator.ValidateAsync(new PurchaseTransaction
+            {
+                ProductId = "coins_100",
+                TransactionId = "transaction-1",
+                Receipt = receipt,
+                IsLegacy = legacy,
+            }, CancellationToken.None).GetAwaiter().GetResult();
+
+            Assert.IsFalse(result.IsValid);
+            Assert.AreEqual(expectedReason, result.FailureReason);
+        }
+
+        [Test]
         public void RewardFailure_ReplaysOnNextStartWithSameTransactionId()
         {
             var provider = new FakeIAPProvider { Initialized = true };

@@ -159,9 +159,9 @@ OnSetup(args)  →  PlayEnter()  →  (显示)  →  PlayExit()  →  (销毁)
 
 | 槽 | 默认(编辑器 / 测试) | 接入真实 SDK |
 |---|---|---|
-| 广告 `IAdsProvider` | 编辑器/开发包 `Fake`;正式包 `Unavailable` | `options.AdsProviderFactory = ...`;未配置时正式包永不返回 `Completed` |
+| 广告 `IAdsProvider` | 编辑器/开发包 `Fake`;正式包 MAX | 配置 `options.MaxAdsSettings`;广告位缺失时正式包安全降级为 `Unavailable` |
 | 内购 `IIAPProvider` | 编辑器/开发包 `Fake`;正式包 Unity IAP 5 | `options.IAPProviderFactory = ...`;商品类型由 `ProductCatalog` 映射 |
-| 验签 `IIAPReceiptValidator` | 编辑器/开发包放行 Fake;正式包拒绝 | `options.IAPReceiptValidatorFactory = ...`,接游戏服务端验签 |
+| 收据 `IIAPReceiptValidator` | 编辑器/开发包放行 Fake;正式包客户端结构校验 | 默认无服务端;需要时通过 `options.IAPReceiptValidatorFactory` 替换为服务端验签 |
 | 统计后端 | 编辑器/开发包 Console;正式包空列表 | `options.AnalyticsBackendsFactory = ...` |
 | 远程配置 | `NoopRemoteConfigProvider` | `options.RemoteConfigProviderFactory = ...` |
 | 存档后端 `ISaveBackend`(云存档,v1 未做) | 本地文件 | 预留接口 |
@@ -171,9 +171,21 @@ public sealed class MyRootLifetimeScope : RootLifetimeScope
 {
     protected override void ConfigureFrameworkOptions(FrameworkOptions options)
     {
-        options.AdsProviderFactory = resolver => new MyAdsProvider();
-        options.IAPReceiptValidatorFactory = resolver =>
-            new ServerReceiptValidator(resolver.Resolve<IHttpService>());
+        options.MaxAdsSettings = new MaxAdsSettings
+        {
+            Android = new MaxAdsPlatformSettings
+            {
+                RewardedAdUnitId = "ANDROID_REWARDED_ID",
+                InterstitialAdUnitId = "ANDROID_INTERSTITIAL_ID",
+                BannerAdUnitId = "ANDROID_BANNER_ID",
+            },
+            IOS = new MaxAdsPlatformSettings
+            {
+                RewardedAdUnitId = "IOS_REWARDED_ID",
+                InterstitialAdUnitId = "IOS_INTERSTITIAL_ID",
+                BannerAdUnitId = "IOS_BANNER_ID",
+            },
+        };
         options.RemoteConfigProviderFactory = resolver => new MyRemoteConfigProvider();
         options.AnalyticsBackendsFactory = resolver =>
             new IAnalyticsBackend[] { new MyAnalyticsBackend() };
@@ -181,9 +193,17 @@ public sealed class MyRootLifetimeScope : RootLifetimeScope
 }
 ```
 
-IAP 的 `ProcessPurchase` 会保持 Pending。交易先写入 `iap-transactions.json`,通过验签并由
+MAX Core SDK 已由 UPM 依赖固定为 8.6.4。上线前需在 **AppLovin > Integration Manager**
+填写 SDK Key、安装实际参与竞价的广告网络 Adapter,并完成隐私/ATT 流程;Android 开启 Jetifier,
+iOS 构建机安装 CocoaPods。框架只在收到 MAX 的 `OnAdReceivedRewardEvent` 后返回奖励完成,
+关闭但未获奖返回 `Skipped`;加载失败按 2~64 秒指数退避。
+
+IAP 的 `ProcessPurchase` 会保持 Pending。交易先写入 `iap-transactions.json`,通过客户端交易
+结构/收据存在性校验并由
 `SetRewardHandler((transaction, ct) => ...)` 成功发奖后才向商店确认。发奖实现必须用
 `transaction.TransactionId` 做幂等;否则应用恰好在发奖后、journal 落盘前退出时仍可能重复发奖。
+当前方案不做服务端密码学验签,不能抵御已控制客户端的攻击者;以后增加服务端时只需替换
+`IIAPReceiptValidator`,交易和发奖链路无需重写。旧版无收据 pending 不会自动放行。
 
 ---
 
@@ -212,7 +232,7 @@ public static void SetHighScore(int value) { /* ... */ }
 
 | 层 | 策略 |
 |---|---|
-| Core / 服务业务逻辑 | 206 项 EditMode 单测(状态机、对象池、存档迁移、事件、UI、HTTP 幂等重试、IAP Pending/验签/补单等) |
+| Core / 服务业务逻辑 | 213 项 EditMode 单测(状态机、对象池、存档迁移、事件、UI、HTTP 幂等重试、MAX 回调、IAP Pending/补单等) |
 | 运行时生命周期 | 3 项 PlayMode 冒烟(淡出遮罩、音频宿主释放、正式广告安全关闭) |
 | SDK 真机路径 | Fake 覆盖业务流转 + iOS/Android 商店沙盒与广告测试设备验收 |
 

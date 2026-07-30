@@ -1,6 +1,7 @@
 {
   "dependencies": {
     "com.coplaydev.unity-mcp": "https://github.com/CoplayDev/unity-mcp.git?path=/MCPForUnity#78ee5418415953b79c358bfe6355fcc3fde7912b",
+    "com.applovin.mediation.ads": "8.6.4",
     "com.cysharp.messagepipe": "1.8.1",
     "com.cysharp.messagepipe.vcontainer": "1.8.1",
     "com.cysharp.unitask": "2.5.10",
@@ -73,9 +74,19 @@
       "url": "https://package.openupm.com",
       "scopes": [
         "com.cysharp",
+        "com.google.external-dependency-manager",
         "com.kyrylokuzyk",
         "com.yasirkula",
         "jp.hadashikick"
+      ]
+    },
+    {
+      "name": "AppLovin MAX Unity",
+      "url": "https://unity.packages.applovin.com/",
+      "scopes": [
+        "com.applovin.mediation.ads",
+        "com.applovin.mediation.adapters",
+        "com.applovin.mediation.dsp"
       ]
     }
   ]

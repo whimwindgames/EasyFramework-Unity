@@ -22,7 +22,7 @@ namespace EasyFramework.Monetization.IAP
 
     /// <summary>
     /// 独立于 PlayerPrefs 的交易日志。先写临时文件再替换正式文件,避免应用退出时留下半份 JSON。
-    /// 防篡改与最终裁决仍必须由服务端验签负责。
+    /// 此日志负责可靠补单而非防篡改;如需抵御已控制客户端的攻击者,必须替换为服务端验签。
     /// </summary>
     public sealed class JsonIAPTransactionStore : IIAPTransactionStore
     {

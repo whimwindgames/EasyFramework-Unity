@@ -2,7 +2,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Unity-6000.3-black?logo=unity" alt="Unity 6000.3">
-  <img src="https://img.shields.io/badge/tests-206%20EditMode%20%2B%203%20PlayMode-2dd4bf" alt="209 tests">
+  <img src="https://img.shields.io/badge/tests-213%20EditMode%20%2B%203%20PlayMode-2dd4bf" alt="216 tests">
   <img src="https://img.shields.io/badge/openupm-v0.2.1-blue" alt="OpenUPM">
   <img src="https://img.shields.io/badge/platform-iOS%20%7C%20Android-388bfd" alt="iOS / Android">
   <img src="https://img.shields.io/badge/DI-VContainer-a371f7" alt="VContainer">
@@ -19,7 +19,7 @@
 - **DI 内核 + 静态门面** — VContainer 管理装配与生命周期,业务层用 `G.UI` / `G.Audio` / `G.Save` 等门面快速开发,核心逻辑仍可构造注入、可单测。
 - **核心层(纯 C#,全单测)** — 异步状态机、对象池、定时器、强类型事件总线、优先级启动管线。
 - **服务层(11 模块)** — 资源(Addressables 按场景自动释放)、场景过渡、存档(HMAC + 版本迁移 + 原子写)、远程配置、四层 UI 栈(弹窗带返回值)、音频交叉淡入、手势识别、相机、Juice 手感、本地化、震动。
-- **商业化层(接口 + 适配器)** — 广告(频控)、Unity IAP 5(Pending 交易 + journal + 服务端验签槽 + 幂等补单)、多后端数据统计;正式环境未配置 SDK/验签时安全关闭,不会误发奖励。
+- **商业化层(接口 + 适配器)** — AppLovin MAX 聚合广告(频控、预加载、失败退避)、Unity IAP 5(Pending 交易 + journal + 客户端收据确认 + 幂等补单)、多后端数据统计;广告位未配置时安全关闭,不会误发奖励。
 - **开发体验** — 真机调试控制台、`[Cheat]` 特性作弊命令、FPS/内存角标、新游戏模板、完整示例游戏。
 
 ## 安装

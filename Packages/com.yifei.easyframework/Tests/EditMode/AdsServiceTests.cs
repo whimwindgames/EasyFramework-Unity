@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
@@ -136,6 +137,124 @@ namespace EasyFramework.Tests
             Assert.AreEqual(AdResult.NotReady, r);
             Assert.AreEqual("ad_request", an.Events[0].name);
             CollectionAssert.DoesNotContain(an.Names(), "ad_show");
+        }
+    }
+
+    public class MaxAdsProviderTests
+    {
+        sealed class FakeMaxAdsClient : IMaxAdsClient
+        {
+            public event Action<bool> SdkInitialized;
+            public event Action<string> RewardedLoaded;
+            public event Action<string> RewardedLoadFailed;
+            public event Action<string> RewardedHidden;
+            public event Action<string> RewardedDisplayFailed;
+            public event Action<string> RewardReceived;
+            public event Action<string> InterstitialLoaded;
+            public event Action<string> InterstitialLoadFailed;
+            public event Action<string> InterstitialHidden;
+            public event Action<string> InterstitialDisplayFailed;
+
+            public bool RewardedReady;
+            public bool InterstitialReady;
+            public int RewardedLoads;
+            public int InterstitialLoads;
+            public int BannerCreates;
+            public int BannerDestroys;
+
+            public void Initialize() => SdkInitialized?.Invoke(true);
+            public bool IsRewardedReady(string adUnitId) => RewardedReady;
+            public bool IsInterstitialReady(string adUnitId) => InterstitialReady;
+            public void LoadRewarded(string adUnitId) => RewardedLoads++;
+            public void LoadInterstitial(string adUnitId) => InterstitialLoads++;
+            public void ShowRewarded(string adUnitId, string placement) { }
+            public void ShowInterstitial(string adUnitId, string placement) { }
+            public void CreateBanner(string adUnitId, BannerPosition position, string backgroundColor)
+                => BannerCreates++;
+            public void ShowBanner(string adUnitId) { }
+            public void HideBanner(string adUnitId) { }
+            public void DestroyBanner(string adUnitId) => BannerDestroys++;
+            public void Dispose() { }
+
+            public void Reward(string id) => RewardReceived?.Invoke(id);
+            public void HideRewarded(string id) => RewardedHidden?.Invoke(id);
+            public void FailRewardedLoad(string id) => RewardedLoadFailed?.Invoke(id);
+            public void HideInterstitial(string id) => InterstitialHidden?.Invoke(id);
+
+            // 保留事件完整实现,确保测试替身与正式 SDK 契约同步。
+            public void LoadedRewarded(string id) => RewardedLoaded?.Invoke(id);
+            public void FailRewardedDisplay(string id) => RewardedDisplayFailed?.Invoke(id);
+            public void LoadedInterstitial(string id) => InterstitialLoaded?.Invoke(id);
+            public void FailInterstitialLoad(string id) => InterstitialLoadFailed?.Invoke(id);
+            public void FailInterstitialDisplay(string id) => InterstitialDisplayFailed?.Invoke(id);
+        }
+
+        static MaxAdsSettings Settings()
+            => new MaxAdsSettings
+            {
+                Android = new MaxAdsPlatformSettings
+                {
+                    RewardedAdUnitId = "rewarded",
+                    InterstitialAdUnitId = "interstitial",
+                    BannerAdUnitId = "banner",
+                },
+            };
+
+        [Test]
+        public void Initialize_PreloadsFullscreenAds()
+        {
+            var client = new FakeMaxAdsClient();
+            using var provider = new MaxAdsProvider(Settings(), client);
+
+            provider.InitializeAsync(CancellationToken.None).GetAwaiter().GetResult();
+
+            Assert.AreEqual(1, client.RewardedLoads);
+            Assert.AreEqual(1, client.InterstitialLoads);
+        }
+
+        [Test]
+        public void Rewarded_CompletesOnlyAfterRewardSignalAndHidden()
+        {
+            var client = new FakeMaxAdsClient { RewardedReady = true };
+            using var provider = new MaxAdsProvider(Settings(), client);
+            provider.InitializeAsync(CancellationToken.None).GetAwaiter().GetResult();
+
+            var show = provider.ShowRewardedAsync("double_coins");
+            client.Reward("rewarded");
+            client.HideRewarded("rewarded");
+
+            Assert.AreEqual(AdResult.Completed, show.GetAwaiter().GetResult());
+            Assert.AreEqual(2, client.RewardedLoads, "关闭后应立即预加载下一条");
+        }
+
+        [Test]
+        public void Rewarded_ClosedWithoutRewardSignal_IsSkipped()
+        {
+            var client = new FakeMaxAdsClient { RewardedReady = true };
+            using var provider = new MaxAdsProvider(Settings(), client);
+            provider.InitializeAsync(CancellationToken.None).GetAwaiter().GetResult();
+
+            var show = provider.ShowRewardedAsync("double_coins");
+            client.HideRewarded("rewarded");
+
+            Assert.AreEqual(AdResult.Skipped, show.GetAwaiter().GetResult());
+        }
+
+        [Test]
+        public void Rewarded_LoadFailure_RetriesAndBannerMoveRecreates()
+        {
+            var client = new FakeMaxAdsClient();
+            using var provider = new MaxAdsProvider(
+                Settings(), client, (_, __) => UniTask.CompletedTask);
+            provider.InitializeAsync(CancellationToken.None).GetAwaiter().GetResult();
+
+            client.FailRewardedLoad("rewarded");
+            provider.ShowBanner(BannerPosition.Bottom);
+            provider.ShowBanner(BannerPosition.Top);
+
+            Assert.AreEqual(2, client.RewardedLoads);
+            Assert.AreEqual(2, client.BannerCreates);
+            Assert.AreEqual(1, client.BannerDestroys);
         }
     }
 }

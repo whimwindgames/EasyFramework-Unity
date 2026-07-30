@@ -6,9 +6,9 @@
 
 ### Security
 
-- 正式包未接广告 SDK 时改为安全关闭,奖励广告不再由 Fake 实现误报完成。
-- Unity IAP 升级到 v5 API:交易保持 Pending,先写原子 journal,再服务端验签、幂等发奖并确认;启动补单、恢复购买和重复交易共用同一链路。
-- 正式包未配置 `IIAPReceiptValidator` 时拒绝发奖并保留交易,不会静默信任客户端收据。
+- 正式广告采用 AppLovin MAX 8.6.4:奖励、插屏和 Banner 共用正式适配器,实现启动预加载、2~64 秒失败退避、关闭后补载和静态回调释放;广告位未配置时安全关闭。
+- Unity IAP 升级到 v5 API:交易保持 Pending,先写原子 journal,再验证、幂等发奖并确认;启动补单、恢复购买和重复交易共用同一链路。
+- 无游戏服务端时使用显式 `ClientOnlyIAPReceiptValidator`:只接受带完整交易标识与收据的当前商店回调,拒绝旧版无收据交易;保留随时替换为服务端验签的接口。
 - HTTP POST 默认禁止自动重试;只有显式开启并提供幂等键时才重试。
 
 ### Fixed
@@ -29,7 +29,7 @@
 
 ### Tests
 
-- 206 项 EditMode 与 3 项 PlayMode 冒烟测试。
+- 213 项 EditMode 与 3 项 PlayMode 冒烟测试。
 - 新增 `scripts/run-unity-tests.sh`,可用于本地或自托管 CI。
 
 ## [0.2.0] - 2026-07-05

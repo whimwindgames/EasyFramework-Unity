@@ -13,9 +13,9 @@ namespace EasyFramework.Template
 
         protected override void ConfigureFrameworkOptions(FrameworkOptions options)
         {
-            // 正式项目示例:
-            // options.AdsProviderFactory = resolver => new YourAdsProvider(...);
-            // options.IAPReceiptValidatorFactory = resolver => new ServerReceiptValidator(...);
+            // 正式项目在这里配置 MaxAdsSettings(Android/iOS 奖励、插屏、Banner 广告位)。
+            // 无服务端内购验证时框架默认使用 ClientOnlyIAPReceiptValidator;以后可在这里
+            // 通过 IAPReceiptValidatorFactory 无缝替换成服务器验签。
             // options.RemoteConfigProviderFactory = resolver => new YourRemoteConfigProvider(...);
             // options.AnalyticsBackendsFactory = resolver =>
             //     new IAnalyticsBackend[] { new YourAnalyticsBackend(...) };

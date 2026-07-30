@@ -51,9 +51,14 @@ namespace EasyFramework
         public Func<IObjectResolver, IRemoteConfigProvider> RemoteConfigProviderFactory;
         /// <summary>
         /// 广告适配器工厂。编辑器/开发包默认使用 Fake;正式包未配置时使用安全关闭实现,
-        /// 永远不会把奖励广告报告为完成。
+        /// 永远不会把奖励广告报告为完成。为 null 且配置了 MaxAdsSettings 时,正式包使用 MAX。
         /// </summary>
         public Func<IObjectResolver, IAdsProvider> AdsProviderFactory;
+        /// <summary>
+        /// AppLovin MAX SDK Key 与 Android/iOS 广告位。正式包在未自定义 AdsProviderFactory 时使用。
+        /// 广告位缺失时自动降级到 UnavailableAdsProvider。
+        /// </summary>
+        public MaxAdsSettings MaxAdsSettings;
         /// <summary>
         /// 统计后端工厂。编辑器/开发包默认输出到 Console;正式包默认不发送任何数据。
         /// </summary>
@@ -61,7 +66,7 @@ namespace EasyFramework
         /// <summary>内购商店适配器工厂;必须在根容器构建前设置。</summary>
         public Func<IObjectResolver, IIAPProvider> IAPProviderFactory;
         /// <summary>
-        /// 内购收据验签工厂。编辑器/开发包默认放行 Fake 收据;正式包未配置时拒绝发奖。
+        /// 内购收据验证工厂。默认使用客户端交易结构校验;需要服务端验签时在此替换。
         /// </summary>
         public Func<IObjectResolver, IIAPReceiptValidator> IAPReceiptValidatorFactory;
         /// <summary>内购交易日志文件名;默认 iap-transactions.json。</summary>
@@ -169,7 +174,8 @@ namespace EasyFramework
 
             // ---- Ads(Phase 4)----
             builder.Register<IAdsProvider>(c =>
-                CreateRequired(options.AdsProviderFactory, c, CreateDefaultAdsProvider,
+                CreateRequired(options.AdsProviderFactory, c,
+                    () => CreateDefaultAdsProvider(options.MaxAdsSettings),
                     nameof(options.AdsProviderFactory)), Lifetime.Singleton);
             // 工厂 lambda 显式走 3 参生产构造:AdsService 另有一个 internal(IAdsProvider,IConfigService,
             // IAnalyticsService,Func<float>)测试构造,VContainer 自动选最长构造会去解析未注册的 Func<float> 而失败
@@ -230,12 +236,14 @@ namespace EasyFramework
                 $"FrameworkOptions.{optionName} returned null.");
         }
 
-        static IAdsProvider CreateDefaultAdsProvider()
+        static IAdsProvider CreateDefaultAdsProvider(MaxAdsSettings maxSettings)
         {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             return new FakeAdsProvider();
 #else
-            return new UnavailableAdsProvider();
+            return maxSettings?.IsConfiguredForCurrentPlatform == true
+                ? new MaxAdsProvider(maxSettings)
+                : new UnavailableAdsProvider();
 #endif
         }
 
@@ -262,7 +270,7 @@ namespace EasyFramework
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             return new DevelopmentIAPReceiptValidator();
 #else
-            return new UnavailableIAPReceiptValidator();
+            return new ClientOnlyIAPReceiptValidator();
 #endif
         }
     }

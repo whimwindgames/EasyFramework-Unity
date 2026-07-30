@@ -7,7 +7,7 @@ namespace EasyFramework.Monetization.Ads
 
     public enum BannerPosition { Top, Bottom }
 
-    /// <summary>SDK 适配点。Fake / AdMob / LevelPlay 各实现一个;在 LifetimeScope 按平台/环境切换。</summary>
+    /// <summary>SDK 适配点。框架内置 Fake / MAX / Unavailable,也可在根 LifetimeScope 替换。</summary>
     public interface IAdsProvider
     {
         UniTask InitializeAsync(CancellationToken ct);

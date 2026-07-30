@@ -64,7 +64,7 @@ namespace EasyFramework.Monetization.IAP
             => new ReceiptValidationResult { IsValid = false, FailureReason = reason };
     }
 
-    /// <summary>正式项目应实现服务端验签;未配置的正式包默认拒绝发奖。</summary>
+    /// <summary>交易收据验证扩展点;默认客户端模式可替换为服务端验签。</summary>
     public interface IIAPReceiptValidator
     {
         UniTask<ReceiptValidationResult> ValidateAsync(
