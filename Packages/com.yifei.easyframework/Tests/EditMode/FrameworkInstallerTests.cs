@@ -177,6 +177,36 @@ namespace EasyFramework.Tests
         }
 
         [Test]
+        public void Install_UsesRootOptionsAdsProviderFactory()
+        {
+            var provider = new FakeAdsProvider
+            {
+                Delay = 0f,
+                IsRewardedReady = true,
+                NextResult = AdResult.Skipped,
+            };
+            var builder = new ContainerBuilder();
+            var options = MakeOptions();
+            options.AdsProviderFactory = _ => provider;
+            EasyFramework.FrameworkInstaller.Install(builder, options);
+            var container = builder.Build();
+
+            Assert.AreSame(provider, container.Resolve<IAdsProvider>());
+            Assert.AreEqual(AdResult.Skipped,
+                container.Resolve<IAdsService>().ShowRewardedAsync("test")
+                    .GetAwaiter().GetResult());
+        }
+
+        [Test]
+        public void UnavailableAdsProvider_NeverCompletesReward()
+        {
+            var provider = new UnavailableAdsProvider();
+            Assert.IsFalse(provider.IsRewardedReady);
+            Assert.AreEqual(AdResult.NotReady,
+                provider.ShowRewardedAsync("test").GetAwaiter().GetResult());
+        }
+
+        [Test]
         public void GFacade_BindsMonetizationServices()
         {
             var c = Build();

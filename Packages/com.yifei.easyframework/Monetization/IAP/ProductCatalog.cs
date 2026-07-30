@@ -18,11 +18,15 @@ namespace EasyFramework.Monetization.IAP
 
         public IReadOnlyList<Entry> Entries => _entries;
 
-        public IReadOnlyList<string> ProductIds()
+        public IReadOnlyList<IAPProductDefinition> ProductDefinitions()
         {
-            var ids = new List<string>(_entries.Count);
-            foreach (var e in _entries) ids.Add(e.Id);
-            return ids;
+            var products = new List<IAPProductDefinition>(_entries.Count);
+            foreach (var entry in _entries)
+            {
+                if (!string.IsNullOrWhiteSpace(entry.Id))
+                    products.Add(new IAPProductDefinition(entry.Id, entry.Type));
+            }
+            return products;
         }
 
         public bool TryGet(string id, out Entry entry)

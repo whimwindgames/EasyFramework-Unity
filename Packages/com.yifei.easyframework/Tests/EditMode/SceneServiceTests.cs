@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using Cysharp.Threading.Tasks;
 using EasyFramework.Core.Events;
 using EasyFramework.Services.Scenes;
@@ -20,20 +21,28 @@ namespace EasyFramework.Tests
         {
             readonly List<string> _log;
             public RecordingTransition(List<string> log) => _log = log;
-            public UniTask PlayOut() { _log.Add("PlayOut"); return UniTask.CompletedTask; }
-            public UniTask PlayIn() { _log.Add("PlayIn"); return UniTask.CompletedTask; }
+            public UniTask PlayOut(CancellationToken ct = default)
+            { _log.Add("PlayOut"); return UniTask.CompletedTask; }
+            public UniTask PlayIn(CancellationToken ct = default)
+            { _log.Add("PlayIn"); return UniTask.CompletedTask; }
         }
 
         sealed class FakeSceneLoader : ISceneLoader
         {
             readonly List<string> _log;
             readonly float[] _progressSteps;
+            readonly bool _throw;
             public FakeSceneLoader(List<string> log, float[] progressSteps)
-            { _log = log; _progressSteps = progressSteps; }
+                : this(log, progressSteps, false) { }
+            public FakeSceneLoader(List<string> log, float[] progressSteps, bool shouldThrow)
+            { _log = log; _progressSteps = progressSteps; _throw = shouldThrow; }
 
-            public UniTask LoadAsync(string sceneName, IProgress<float> progress)
+            public UniTask LoadAsync(
+                string sceneName, IProgress<float> progress, CancellationToken ct)
             {
+                ct.ThrowIfCancellationRequested();
                 _log.Add($"Load:{sceneName}");
+                if (_throw) throw new InvalidOperationException("load failed");
                 if (progress != null)
                     foreach (var p in _progressSteps) progress.Report(p);
                 return UniTask.CompletedTask;
@@ -79,6 +88,25 @@ namespace EasyFramework.Tests
             var t = new NoopSceneTransition();
             Assert.IsTrue(t.PlayOut().Status.IsCompleted());
             Assert.IsTrue(t.PlayIn().Status.IsCompleted());
+        }
+
+        [Test]
+        public void LoadFailure_UnblocksTransitionAndKeepsCurrentScene()
+        {
+            var log = new List<string>();
+            var bus = new FakeBus();
+            var service = new SceneService(
+                new FakeSceneLoader(log, Array.Empty<float>(), true),
+                new RecordingTransition(log), bus, "Boot");
+
+            Assert.Throws<InvalidOperationException>(() =>
+                service.LoadAsync("Broken").GetAwaiter().GetResult());
+
+            CollectionAssert.AreEqual(
+                new[] { "PlayOut", "Load:Broken", "PlayIn" }, log);
+            Assert.AreEqual("Boot", service.CurrentScene);
+            Assert.AreEqual(1, bus.Published.Count);
+            Assert.IsInstanceOf<SceneWillUnloadEvent>(bus.Published[0]);
         }
 
         sealed class ProgressCollector : IProgress<float>

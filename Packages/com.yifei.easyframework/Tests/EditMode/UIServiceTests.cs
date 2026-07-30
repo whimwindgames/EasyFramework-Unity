@@ -21,6 +21,7 @@ namespace EasyFramework.Tests
         }
 
         sealed class WindowB : UIPanel { }
+        sealed class MissingWindow : UIPanel { }
 
         // 消费返回键的 Window(返回 true)
         sealed class BackConsumingWindow : UIPanel
@@ -73,6 +74,8 @@ namespace EasyFramework.Tests
                 { "ui/ConfirmPopup", MakePrefab<ConfirmPopup>() },
                 { "ui/HudPanel", MakePrefab<HudPanel>() },
             };
+            var wrongPrefab = MakePrefab<WindowA>();
+            dict.Add("ui/MissingWindow", wrongPrefab);
             _assets = new FakeAssetService(dict);
             _ui = new UIService(_assets);
         }
@@ -112,6 +115,16 @@ namespace EasyFramework.Tests
             var a = _ui.PushAsync<WindowA>().GetAwaiter().GetResult();
             _ui.PushAsync<WindowB>().GetAwaiter().GetResult();
             Assert.IsFalse(a.gameObject.activeSelf, "下层栈顶应被隐藏");
+        }
+
+        [Test]
+        public void Push_Failure_CompletesCallerAndReactivatesPrevious()
+        {
+            var previous = _ui.PushAsync<WindowA>().GetAwaiter().GetResult();
+            Assert.Throws<System.InvalidOperationException>(() =>
+                _ui.PushAsync<MissingWindow>().GetAwaiter().GetResult());
+            Assert.AreEqual(1, _ui.WindowCount);
+            Assert.IsTrue(previous.gameObject.activeSelf);
         }
 
         [Test]
@@ -175,6 +188,16 @@ namespace EasyFramework.Tests
             ((ConfirmPopup)FindActivePopup()).Cancel();
             var r2 = second.GetAwaiter().GetResult();
             Assert.IsFalse(r2);
+        }
+
+        [Test]
+        public void Dispose_CancelsActivePopupCaller()
+        {
+            var task = _ui.ShowPopupAsync<ConfirmPopup, bool>();
+            _ui.Dispose();
+            Assert.IsTrue(task.Status.IsCompleted());
+            Assert.Throws<System.OperationCanceledException>(() =>
+                task.GetAwaiter().GetResult());
         }
 
         // ---------------- HUD ----------------

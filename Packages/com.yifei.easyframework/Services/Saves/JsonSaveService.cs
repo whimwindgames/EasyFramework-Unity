@@ -19,7 +19,20 @@ namespace EasyFramework.Services.Saves
         public JsonSaveService(SaveProfile profile, string saveDirectory)
         {
             _profile = profile ?? throw new ArgumentNullException(nameof(profile));
-            _dir = saveDirectory ?? throw new ArgumentNullException(nameof(saveDirectory));
+            if (_profile.DataType == null || !typeof(SaveData).IsAssignableFrom(_profile.DataType))
+                throw new ArgumentException("SaveProfile.DataType must derive from SaveData.", nameof(profile));
+            if (_profile.CreateNew == null)
+                throw new ArgumentException("SaveProfile.CreateNew is required.", nameof(profile));
+            if (_profile.CurrentVersion < 1)
+                throw new ArgumentOutOfRangeException(nameof(profile), "CurrentVersion must be at least 1.");
+            if (string.IsNullOrWhiteSpace(_profile.FileName) ||
+                Path.GetFileName(_profile.FileName) != _profile.FileName)
+                throw new ArgumentException("SaveProfile.FileName must be a file name, not a path.", nameof(profile));
+            if (string.IsNullOrEmpty(_profile.HmacSalt))
+                throw new ArgumentException("SaveProfile.HmacSalt is required.", nameof(profile));
+            if (string.IsNullOrWhiteSpace(saveDirectory))
+                throw new ArgumentException("Save directory is required.", nameof(saveDirectory));
+            _dir = saveDirectory;
             _path = Path.Combine(_dir, _profile.FileName);
         }
 
@@ -29,7 +42,7 @@ namespace EasyFramework.Services.Saves
 
             if (!File.Exists(_path))
             {
-                _data = _profile.CreateNew();
+                _data = CreateNew();
                 return UniTask.CompletedTask;
             }
 
@@ -46,17 +59,30 @@ namespace EasyFramework.Services.Saves
             {
                 Debug.LogWarning($"[EasyFramework] Save corrupt ({e.Message}); backing up and recreating.");
                 BackupCorrupt();
-                _data = _profile.CreateNew();
+                _data = CreateNew();
                 return UniTask.CompletedTask;
             }
 
-            var raw = JObject.Parse(payload);
-            if (!ApplyMigrations(raw))
+            try
             {
-                _data = _profile.CreateNew();
+                var raw = JObject.Parse(payload);
+                if (!ApplyMigrations(raw))
+                {
+                    _data = CreateNew();
+                    return UniTask.CompletedTask;
+                }
+                _data = (SaveData)raw.ToObject(_profile.DataType);
+                if (_data == null)
+                    throw new InvalidDataException("Save payload deserialized to null.");
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning(
+                    $"[EasyFramework] Save payload invalid ({e.Message}); backing up and recreating.");
+                BackupCorrupt();
+                _data = CreateNew();
                 return UniTask.CompletedTask;
             }
-            _data = (SaveData)raw.ToObject(_profile.DataType);
             return UniTask.CompletedTask;
         }
 
@@ -90,7 +116,14 @@ namespace EasyFramework.Services.Saves
                     if (m.FromVersion == version)
                     {
                         m.Migrate(raw);
-                        version = raw["Version"]?.Value<int>() ?? version + 1;
+                        var nextVersion = raw["Version"]?.Value<int>() ?? version + 1;
+                        if (nextVersion <= version)
+                            throw new InvalidDataException(
+                                $"Migration from version {version} did not advance the version.");
+                        if (nextVersion > _profile.CurrentVersion)
+                            throw new InvalidDataException(
+                                $"Migration advanced past target version {_profile.CurrentVersion}.");
+                        version = nextVersion;
                         found = true;
                         break;
                     }
@@ -122,13 +155,41 @@ namespace EasyFramework.Services.Saves
 
             var tmp = _path + ".tmp";
             File.WriteAllText(tmp, envelope.ToString(Formatting.None));
-            if (File.Exists(_path))
-                File.Replace(tmp, _path, null);
-            else
+            if (!File.Exists(_path))
+            {
                 File.Move(tmp, _path);
+                return;
+            }
+            try
+            {
+                File.Replace(tmp, _path, null);
+            }
+            catch (PlatformNotSupportedException)
+            {
+                File.Copy(tmp, _path, true);
+                File.Delete(tmp);
+            }
         }
 
-        public T Data<T>() where T : SaveData => (T)_data;
+        public T Data<T>() where T : SaveData
+        {
+            if (_data == null)
+                throw new InvalidOperationException("Call LoadAsync before Data.");
+            if (_data is not T typed)
+                throw new InvalidCastException(
+                    $"Save profile contains {_data.GetType().Name}, not {typeof(T).Name}.");
+            return typed;
+        }
+
+        SaveData CreateNew()
+        {
+            var data = _profile.CreateNew();
+            if (data == null || !_profile.DataType.IsInstanceOfType(data))
+                throw new InvalidOperationException(
+                    "SaveProfile.CreateNew returned null or the wrong data type.");
+            data.Version = _profile.CurrentVersion;
+            return data;
+        }
 
         void BackupCorrupt()
         {

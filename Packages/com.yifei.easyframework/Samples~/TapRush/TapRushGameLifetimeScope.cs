@@ -31,10 +31,11 @@ namespace Game
             builder.RegisterBuildCallback(resolver =>
             {
                 var iap = resolver.Resolve<IAPService>();
-                iap.SetRewardHandler(productId =>
+                iap.SetRewardHandler((transaction, _) =>
                 {
-                    // TapRush 无真实内购商品;此处示例发奖逻辑。
-                    Debug.Log($"[TapRush] Granting reward for product '{productId}'.");
+                    // 正式游戏必须把 transaction.TransactionId 与游戏存档一起做幂等。
+                    Debug.Log($"[TapRush] Granting '{transaction.ProductId}', tx={transaction.TransactionId}.");
+                    return Cysharp.Threading.Tasks.UniTask.FromResult(true);
                 });
             });
         }

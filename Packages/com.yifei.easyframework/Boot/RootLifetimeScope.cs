@@ -43,6 +43,7 @@ namespace EasyFramework
                 DefaultLocale = _defaultLocale,
                 ProductCatalog = _productCatalog,
             };
+            ConfigureFrameworkOptions(options);
 
             FrameworkInstaller.Install(builder, options);
 
@@ -70,6 +71,18 @@ namespace EasyFramework
         /// 故经此代码 seam 注入,而非 Inspector 字段。
         /// </summary>
         protected virtual SaveProfile GetSaveProfile() => null;
+
+        /// <summary>
+        /// 在根容器构建前配置广告、内购、统计和远程配置等适配器。
+        /// 这些根服务不能在 GameLifetimeScope 子作用域中覆盖。
+        /// </summary>
+        protected virtual void ConfigureFrameworkOptions(FrameworkOptions options) { }
+
+        protected override void OnDestroy()
+        {
+            G.Reset(Container);
+            base.OnDestroy();
+        }
     }
 
     /// <summary>把 TimerService.Tick() 桥接到 VContainer 的 PlayerLoop Tick 循环。</summary>

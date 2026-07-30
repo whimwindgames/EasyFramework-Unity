@@ -6,7 +6,7 @@
 //   1. 导入 Google Mobile Ads (AdMob) Unity 插件;
 //   2. 在 Player Settings > Scripting Define Symbols 定义 EF_ADMOB;
 //   3. 填充下方各方法体(签名已与 IAdsProvider 锁定,业务层零改动);
-//   4. 在 GameLifetimeScope 覆盖注册 IAdsProvider -> AdMobAdsProvider。
+//   4. 在 RootLifetimeScope.ConfigureFrameworkOptions 设置 AdsProviderFactory。
 // IAdsService(AdsService 业务层)、FakeAdsProvider、AdsServiceTests 全部不变。
 // ===========================================================================
 #if EF_ADMOB

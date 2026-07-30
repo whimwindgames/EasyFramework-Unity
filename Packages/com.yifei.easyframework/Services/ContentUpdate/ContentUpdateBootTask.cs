@@ -14,7 +14,7 @@ namespace EasyFramework.Services.ContentUpdate
 
         public async UniTask InitializeAsync(CancellationToken ct)
         {
-            await _contentUpdate.CheckAsync();
+            await _contentUpdate.CheckAsync(ct);
         }
     }
 }

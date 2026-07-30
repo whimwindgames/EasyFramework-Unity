@@ -2,6 +2,36 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.2.1] - 2026-07-30
+
+### Security
+
+- 正式包未接广告 SDK 时改为安全关闭,奖励广告不再由 Fake 实现误报完成。
+- Unity IAP 升级到 v5 API:交易保持 Pending,先写原子 journal,再服务端验签、幂等发奖并确认;启动补单、恢复购买和重复交易共用同一链路。
+- 正式包未配置 `IIAPReceiptValidator` 时拒绝发奖并保留交易,不会静默信任客户端收据。
+- HTTP POST 默认禁止自动重试;只有显式开启并提供幂等键时才重试。
+
+### Fixed
+
+- 根服务 provider 改为在 `ConfigureFrameworkOptions` 构建前配置,修复子 LifetimeScope “覆盖注册但根服务仍使用 Fake”的问题。
+- UI 创建/动画异常不再让调用方永久 pending;Window/HUD 操作串行化,销毁时取消所有等待者并释放宿主。
+- 场景加载串行化;加载、取消或转场失败后会恢复淡出遮罩,不再留下黑屏和射线阻挡。
+- 非关键 BootTask 的取消不再被吞掉并错误发布 `BootCompletedEvent`。
+- 定时器拒绝零间隔 repeat,捕获单个回调异常并限制单帧追赶次数。
+- 远程配置按完整快照替换;热更成功后清空待应用列表,避免同一 catalog 重复应用。
+- Addressables 失败句柄会从缓存移除并释放,缓存键加入资源类型。
+- 对象池清理被外部销毁的闲置实例,并补齐参数校验、回调失败回滚和幂等 Dispose。
+- 修复音频并发 BGM/Stop 竞态、SFX 异常和持久宿主泄漏;镜头震动时长参数现在真实生效。
+- 顿帧会恢复进入前的 `Time.timeScale`,重入精确延长且 `HitStopAsync` 等到恢复才完成。
+- 触摸 UI 使用正确 finger id,双指缩放不再同时触发单指手势,手势阈值按 DPI 缩放。
+- `LocalizedText` 在运行时晚初始化时会自动绑定;联机服务 Dispose 后正确退订 provider。
+- 存档 profile、迁移推进与反序列化增加校验,损坏 payload 会备份并安全重建。
+
+### Tests
+
+- 206 项 EditMode 与 3 项 PlayMode 冒烟测试。
+- 新增 `scripts/run-unity-tests.sh`,可用于本地或自托管 CI。
+
 ## [0.2.0] - 2026-07-05
 
 ### Added

@@ -47,6 +47,10 @@ namespace EasyFramework.Core.Boot
             {
                 await task.InitializeAsync(ct);
             }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
             catch (Exception e) when (!task.IsCritical)
             {
                 Debug.LogWarning($"[EasyFramework] Non-critical boot task {task.GetType().Name} failed: {e.Message}");

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using Cysharp.Threading.Tasks;
 
 namespace EasyFramework.Services.ContentUpdate
@@ -11,9 +12,10 @@ namespace EasyFramework.Services.ContentUpdate
     public interface IAddressablesCatalogGateway
     {
         /// <summary>返回有更新的 catalog key 列表;无更新时返回空列表。</summary>
-        UniTask<List<string>> CheckForCatalogUpdatesAsync();
+        UniTask<List<string>> CheckForCatalogUpdatesAsync(CancellationToken ct);
 
         /// <summary>下载并应用指定 catalog 的更新;成功返回 true。</summary>
-        UniTask<bool> UpdateCatalogsAsync(List<string> catalogKeys, IProgress<float> progress);
+        UniTask<bool> UpdateCatalogsAsync(
+            List<string> catalogKeys, IProgress<float> progress, CancellationToken ct);
     }
 }

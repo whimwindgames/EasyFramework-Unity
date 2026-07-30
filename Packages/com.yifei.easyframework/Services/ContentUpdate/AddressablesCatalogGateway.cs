@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine.AddressableAssets;
 using UnityEngine.AddressableAssets.ResourceLocators;
@@ -14,12 +15,12 @@ namespace EasyFramework.Services.ContentUpdate
     /// </summary>
     public sealed class AddressablesCatalogGateway : IAddressablesCatalogGateway
     {
-        public async UniTask<List<string>> CheckForCatalogUpdatesAsync()
+        public async UniTask<List<string>> CheckForCatalogUpdatesAsync(CancellationToken ct)
         {
             var handle = Addressables.CheckForCatalogUpdates(false);
             try
             {
-                var result = await handle.ToUniTask();
+                var result = await handle.ToUniTask(cancellationToken: ct);
                 return result ?? new List<string>();
             }
             finally
@@ -28,14 +29,15 @@ namespace EasyFramework.Services.ContentUpdate
             }
         }
 
-        public async UniTask<bool> UpdateCatalogsAsync(List<string> catalogKeys, IProgress<float> progress)
+        public async UniTask<bool> UpdateCatalogsAsync(
+            List<string> catalogKeys, IProgress<float> progress, CancellationToken ct)
         {
             // Addressables.UpdateCatalogs 返回 AsyncOperationHandle<List<IResourceLocator>>(更新后的 locator 列表),
             // 而非 bool;成功与否通过 handle.Status 判断,而不是 Result 本身。
             AsyncOperationHandle<List<IResourceLocator>> handle = Addressables.UpdateCatalogs(catalogKeys, false);
             try
             {
-                await handle.ToUniTask(progress: progress);
+                await handle.ToUniTask(progress: progress, cancellationToken: ct);
 
                 var succeeded = handle.Status == AsyncOperationStatus.Succeeded;
                 if (succeeded) progress?.Report(1f);

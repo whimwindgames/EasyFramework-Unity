@@ -10,7 +10,9 @@ namespace EasyFramework.Services.Configs
     public sealed class ConfigService : IConfigService
     {
         readonly Dictionary<string, string> _local = new();
-        readonly Dictionary<string, string> _remote = new();
+        readonly SemaphoreSlim _refreshGate = new(1, 1);
+        IReadOnlyDictionary<string, string> _remote =
+            new Dictionary<string, string>();
         readonly IRemoteConfigProvider _provider;
 
         public ConfigService(IReadOnlyList<ConfigTable> tables, IRemoteConfigProvider provider)
@@ -23,11 +25,32 @@ namespace EasyFramework.Services.Configs
                             _local[e.Key] = e.Value;
         }
 
-        public async UniTask RefreshRemoteAsync(CancellationToken ct)
+        public async UniTask RefreshRemoteAsync(CancellationToken ct = default)
         {
-            var fetched = await _provider.FetchAsync(ct);
-            if (fetched == null) return;
-            foreach (var kv in fetched) _remote[kv.Key] = kv.Value;
+            await _refreshGate.WaitAsync(ct);
+            try
+            {
+                var fetched = await _provider.FetchAsync(ct);
+                var snapshot = new Dictionary<string, string>();
+                if (fetched != null)
+                {
+                    foreach (var pair in fetched)
+                    {
+                        if (string.IsNullOrWhiteSpace(pair.Key))
+                        {
+                            Debug.LogWarning("[EasyFramework] Remote config ignored an empty key.");
+                            continue;
+                        }
+                        snapshot[pair.Key] = pair.Value;
+                    }
+                }
+                // 整份快照原子替换,服务端删除的键不会继续残留。
+                _remote = snapshot;
+            }
+            finally
+            {
+                _refreshGate.Release();
+            }
         }
 
         public bool Has(string key) => _remote.ContainsKey(key) || _local.ContainsKey(key);

@@ -9,6 +9,7 @@ namespace EasyFramework.Services.Localization
     /// </summary>
     public static class LocalizationRuntime
     {
+        public static event System.Action Initialized;
         public static ILocalizationService Loc { get; private set; }
         public static IEventBus Events { get; private set; }
         public static bool IsInitialized { get; private set; }
@@ -18,6 +19,8 @@ namespace EasyFramework.Services.Localization
             Loc = loc;
             Events = events;
             IsInitialized = loc != null && events != null;
+            if (IsInitialized)
+                Initialized?.Invoke();
         }
 
         public static void Reset()

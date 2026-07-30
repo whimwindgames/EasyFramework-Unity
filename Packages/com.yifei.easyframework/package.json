@@ -1,6 +1,6 @@
 {
   "name": "com.yifei.easyframework",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "displayName": "EasyFramework",
   "description": "开箱即用的 Unity 2D 移动游戏复用底座。VContainer 依赖注入内核 + 静态门面,服务层全部接口化,商业化 SDK 可整体替换而不改业务代码。",
   "unity": "6000.0",

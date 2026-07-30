@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System;
 using Cysharp.Threading.Tasks;
 using EasyFramework.Core.Events;
 using UnityEngine;
@@ -50,6 +51,10 @@ namespace EasyFramework.Services.Localization
 
         public UniTask SetLocaleAsync(string localeCode)
         {
+            if (string.IsNullOrWhiteSpace(localeCode))
+                throw new ArgumentException("Locale code is required.", nameof(localeCode));
+            if (CurrentLocale == localeCode)
+                return UniTask.CompletedTask;
             CurrentLocale = localeCode;
             PlayerPrefs.SetString(LocaleKey, localeCode);
             PlayerPrefs.Save();

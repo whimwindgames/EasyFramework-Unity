@@ -1,3 +1,4 @@
+using System.Threading;
 using Cysharp.Threading.Tasks;
 
 namespace EasyFramework.Services.Assets
@@ -6,7 +7,9 @@ namespace EasyFramework.Services.Assets
 
     public interface IAssetService
     {
-        UniTask<T> LoadAsync<T>(string key, AssetScope scope = AssetScope.Scene) where T : UnityEngine.Object;
+        UniTask<T> LoadAsync<T>(
+            string key, AssetScope scope = AssetScope.Scene,
+            CancellationToken ct = default) where T : UnityEngine.Object;
         void ReleaseScope(AssetScope scope);
     }
 }

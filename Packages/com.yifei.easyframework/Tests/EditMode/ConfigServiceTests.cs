@@ -17,6 +17,13 @@ namespace EasyFramework.Tests
                 => UniTask.FromResult(_data);
         }
 
+        sealed class MutableRemote : IRemoteConfigProvider
+        {
+            public IReadOnlyDictionary<string, string> Data;
+            public UniTask<IReadOnlyDictionary<string, string>> FetchAsync(CancellationToken ct)
+                => UniTask.FromResult(Data);
+        }
+
         static ConfigTable MakeTable(params (string, string)[] entries)
         {
             var t = ScriptableObject.CreateInstance<ConfigTable>();
@@ -77,6 +84,25 @@ namespace EasyFramework.Tests
             svc.RefreshRemoteAsync(CancellationToken.None).GetAwaiter().GetResult();
             Assert.AreEqual(5, svc.Get("cooldown", 0));
             Assert.IsTrue(svc.Has("cooldown"));
+        }
+
+        [Test]
+        public void RefreshRemote_ReplacesSnapshotAndRemovesDeletedKeys()
+        {
+            var remote = new MutableRemote
+            {
+                Data = new Dictionary<string, string> { ["temporary"] = "1" },
+            };
+            var service = new ConfigService(
+                new[] { MakeTable(("local", "2")) }, remote);
+            service.RefreshRemoteAsync().GetAwaiter().GetResult();
+            Assert.IsTrue(service.Has("temporary"));
+
+            remote.Data = new Dictionary<string, string>();
+            service.RefreshRemoteAsync().GetAwaiter().GetResult();
+
+            Assert.IsFalse(service.Has("temporary"));
+            Assert.AreEqual(2, service.Get("local", 0));
         }
     }
 }

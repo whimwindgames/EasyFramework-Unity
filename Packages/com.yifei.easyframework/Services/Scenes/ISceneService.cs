@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using Cysharp.Threading.Tasks;
 
 namespace EasyFramework.Services.Scenes
@@ -18,19 +19,22 @@ namespace EasyFramework.Services.Scenes
     /// <summary>转场视觉接口;Phase 3 提供淡入淡出实现,Phase 2 用 Noop。</summary>
     public interface ISceneTransition
     {
-        UniTask PlayOut();
-        UniTask PlayIn();
+        UniTask PlayOut(CancellationToken ct = default);
+        UniTask PlayIn(CancellationToken ct = default);
     }
 
     public sealed class NoopSceneTransition : ISceneTransition
     {
-        public UniTask PlayOut() => UniTask.CompletedTask;
-        public UniTask PlayIn() => UniTask.CompletedTask;
+        public UniTask PlayOut(CancellationToken ct = default)
+            => ct.IsCancellationRequested ? UniTask.FromCanceled(ct) : UniTask.CompletedTask;
+        public UniTask PlayIn(CancellationToken ct = default)
+            => ct.IsCancellationRequested ? UniTask.FromCanceled(ct) : UniTask.CompletedTask;
     }
 
     public interface ISceneService
     {
         string CurrentScene { get; }
-        UniTask LoadAsync(string sceneName, IProgress<float> progress = null);
+        UniTask LoadAsync(string sceneName, IProgress<float> progress = null,
+            CancellationToken ct = default);
     }
 }

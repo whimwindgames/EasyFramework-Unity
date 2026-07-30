@@ -6,8 +6,7 @@
 //   1. 导入 Firebase Analytics Unity SDK;
 //   2. 在 Player Settings > Scripting Define Symbols 定义 EF_FIREBASE;
 //   3. 填充下方方法体(把 parameters 映射为 Firebase.Analytics.Parameter[]);
-//   4. 在 GameLifetimeScope 追加注册一个 IAnalyticsBackend -> FirebaseAnalyticsBackend
-//      (多注册:AnalyticsService 会广播到全部后端,DebugAnalyticsBackend 与本类并存)。
+//   4. 在 RootLifetimeScope.ConfigureFrameworkOptions 设置 AnalyticsBackendsFactory。
 // IAnalyticsBackend / IAnalyticsService 接口、AnalyticsService、打点代码全部不变。
 // ===========================================================================
 #if EF_FIREBASE

@@ -136,6 +136,21 @@ namespace EasyFramework.Tests
             CollectionAssert.AreEqual(new byte[] { 9, 8, 7 }, messages[0].Payload);
         }
 
+        [Test]
+        public void MultiplayerService_Dispose_UnsubscribesProviderMessages()
+        {
+            var provider = new FakeMultiplayerProvider();
+            var bus = new FakeBus();
+            var messages = new List<MultiplayerMessageReceivedEvent>();
+            bus.Subscribe<MultiplayerMessageReceivedEvent>(e => messages.Add(e));
+            var service = new MultiplayerService(provider, bus);
+            service.Dispose();
+
+            provider.SendAsync("chat", new byte[] { 1 }).GetAwaiter().GetResult();
+
+            CollectionAssert.IsEmpty(messages);
+        }
+
         static EasyFramework.FrameworkOptions MakeFrameworkOptionsForBoundaryTest()
             => new EasyFramework.FrameworkOptions
             {

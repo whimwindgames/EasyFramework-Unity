@@ -1,3 +1,4 @@
+using System.Threading;
 using Cysharp.Threading.Tasks;
 
 namespace EasyFramework.Services.UI
@@ -9,22 +10,24 @@ namespace EasyFramework.Services.UI
     public interface IUIService
     {
         /// <summary>压入一个 Window(全屏栈)。完成后返回面板实例。args 透传 OnSetup。</summary>
-        UniTask<T> PushAsync<T>(object args = null) where T : UIPanel;
+        UniTask<T> PushAsync<T>(object args = null, CancellationToken ct = default) where T : UIPanel;
 
         /// <summary>弹出栈顶 Window,回退到下一个;栈空或仅一个时行为见实现(默认仅 1 个不弹)。</summary>
-        UniTask PopAsync();
+        UniTask PopAsync(CancellationToken ct = default);
 
         /// <summary>清空 Window 栈。</summary>
-        UniTask PopAllAsync();
+        UniTask PopAllAsync(CancellationToken ct = default);
 
         /// <summary>显示一个带返回值的弹窗;await 得到用户选择结果。多个并发请求排队,逐个展示。</summary>
-        UniTask<TResult> ShowPopupAsync<TPopup, TResult>(object args = null) where TPopup : UIPopup<TResult>;
+        UniTask<TResult> ShowPopupAsync<TPopup, TResult>(
+            object args = null, CancellationToken ct = default) where TPopup : UIPopup<TResult>;
 
         /// <summary>显示 HUD(单实例);已有 HUD 时先隐藏旧的。</summary>
-        UniTask<T> ShowHudAsync<T>(object args = null) where T : UIPanel;
+        UniTask<T> ShowHudAsync<T>(
+            object args = null, CancellationToken ct = default) where T : UIPanel;
 
         /// <summary>隐藏当前 HUD。</summary>
-        UniTask HideHudAsync();
+        UniTask HideHudAsync(CancellationToken ct = default);
 
         /// <summary>当前 Window 栈深。</summary>
         int WindowCount { get; }

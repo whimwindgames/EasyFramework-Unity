@@ -26,6 +26,8 @@ namespace EasyFramework.Services.Juice
 
         public bool ShouldRestore(float now) => IsActive && now >= _restoreAt;
 
+        public float Remaining(float now) => IsActive ? Mathf.Max(0f, _restoreAt - now) : 0f;
+
         public void Restore() => IsActive = false;
     }
 }

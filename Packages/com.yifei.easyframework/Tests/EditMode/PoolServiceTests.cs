@@ -47,7 +47,6 @@ namespace EasyFramework.Tests
             }
 
             readonly List<Entry> _entries = new();
-            long _nextId = 1;
             public int CancelCallCount { get; private set; }
 
             public TimerHandle Schedule(float delay, Action callback, bool repeat = false, bool useUnscaledTime = false)
@@ -146,6 +145,26 @@ namespace EasyFramework.Tests
             _pool.PrewarmAsync("bullet", 3).GetAwaiter().GetResult();
             var a = _pool.SpawnAsync("bullet").GetAwaiter().GetResult();
             Assert.IsNotNull(a); // 取自预热实例,不再实例化新的(行为以复用为准)
+        }
+
+        [Test]
+        public void Spawn_PurgesExternallyDestroyedIdleInstance()
+        {
+            var first = _pool.SpawnAsync("bullet").GetAwaiter().GetResult();
+            _pool.Despawn(first);
+            UnityEngine.Object.DestroyImmediate(first);
+
+            GameObject replacement = null;
+            Assert.DoesNotThrow(() =>
+                replacement = _pool.SpawnAsync("bullet").GetAwaiter().GetResult());
+            Assert.IsNotNull(replacement);
+        }
+
+        [Test]
+        public void Prewarm_RejectsNegativeCount()
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(() =>
+                _pool.PrewarmAsync("bullet", -1).GetAwaiter().GetResult());
         }
 
         [Test]

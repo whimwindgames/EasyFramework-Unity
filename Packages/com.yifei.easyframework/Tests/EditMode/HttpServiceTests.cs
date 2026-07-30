@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using Cysharp.Threading.Tasks;
 using EasyFramework.Services.Network;
 using Newtonsoft.Json;
@@ -19,8 +20,10 @@ namespace EasyFramework.Tests
             bool _timeoutThrown;
 
             public UniTask<(long statusCode, string body)> SendAsync(
-                HttpMethod method, string url, string jsonBody, HttpRequestOptions options)
+                HttpMethod method, string url, string jsonBody, HttpRequestOptions options,
+                CancellationToken ct)
             {
+                ct.ThrowIfCancellationRequested();
                 Calls.Add((method, url, jsonBody, options));
 
                 if (AlwaysThrowTimeout)
@@ -39,6 +42,9 @@ namespace EasyFramework.Tests
             }
         }
 
+        static HttpService MakeService(FakeHttpTransport transport)
+            => new HttpService(transport, (_, __) => UniTask.CompletedTask);
+
         sealed class Payload
         {
             public string Name;
@@ -50,7 +56,7 @@ namespace EasyFramework.Tests
         {
             var transport = new FakeHttpTransport();
             transport.Responses.Enqueue((200, JsonConvert.SerializeObject(new Payload { Name = "a", Value = 1 })));
-            var svc = new HttpService(transport);
+            var svc = MakeService(transport);
 
             var result = svc.GetAsync<Payload>("https://example.com/api").GetAwaiter().GetResult();
 
@@ -64,7 +70,7 @@ namespace EasyFramework.Tests
         {
             var transport = new FakeHttpTransport();
             transport.Responses.Enqueue((200, JsonConvert.SerializeObject(new Payload { Name = "b", Value = 2 })));
-            var svc = new HttpService(transport);
+            var svc = MakeService(transport);
 
             var result = svc.PostAsync<Payload, Payload>(
                 "https://example.com/api", new Payload { Name = "req", Value = 9 }).GetAwaiter().GetResult();
@@ -79,7 +85,7 @@ namespace EasyFramework.Tests
         {
             var transport = new FakeHttpTransport { ThrowTimeoutOnce = true };
             transport.Responses.Enqueue((200, JsonConvert.SerializeObject(new Payload { Name = "c", Value = 3 })));
-            var svc = new HttpService(transport);
+            var svc = MakeService(transport);
 
             var result = svc.GetAsync<Payload>("https://example.com/api").GetAwaiter().GetResult();
 
@@ -92,11 +98,13 @@ namespace EasyFramework.Tests
         {
             var transport = new FakeHttpTransport();
             transport.Responses.Enqueue((404, "not found"));
-            var svc = new HttpService(transport);
+            var svc = MakeService(transport);
 
             var ex = Assert.Throws<HttpException>(() =>
-                svc.GetAsync<Payload>("https://example.com/api").GetAwaiter().GetResult());
+                svc.GetAsync<Payload>("https://example.com/api",
+                    new HttpRequestOptions { RetryCount = 0 }).GetAwaiter().GetResult());
             Assert.AreEqual(404, ex.StatusCode);
+            StringAssert.DoesNotContain("not found", ex.Message);
         }
 
         [Test]
@@ -104,10 +112,11 @@ namespace EasyFramework.Tests
         {
             var transport = new FakeHttpTransport();
             transport.Responses.Enqueue((500, "server error"));
-            var svc = new HttpService(transport);
+            var svc = MakeService(transport);
 
             var ex = Assert.Throws<HttpException>(() =>
-                svc.GetAsync<Payload>("https://example.com/api").GetAwaiter().GetResult());
+                svc.GetAsync<Payload>("https://example.com/api",
+                    new HttpRequestOptions { RetryCount = 0 }).GetAwaiter().GetResult());
             Assert.AreEqual(500, ex.StatusCode);
         }
 
@@ -116,7 +125,7 @@ namespace EasyFramework.Tests
         {
             var transport = new FakeHttpTransport { AlwaysThrowTimeout = true };
             // RetryCount=2 意味着最多尝试 3 次(1 次初始 + 2 次重试),全部超时。
-            var svc = new HttpService(transport);
+            var svc = MakeService(transport);
             var options = new HttpRequestOptions { RetryCount = 2 };
 
             var ex = Assert.Throws<TimeoutException>(() =>
@@ -124,6 +133,46 @@ namespace EasyFramework.Tests
 
             Assert.IsNotNull(ex);
             Assert.AreEqual(3, transport.Calls.Count); // 1 次初始 + 2 次重试,全部耗尽
+        }
+
+        [Test]
+        public void GetAsync_RetriesTransient5xxThenSucceeds()
+        {
+            var transport = new FakeHttpTransport();
+            transport.Responses.Enqueue((503, "temporary"));
+            transport.Responses.Enqueue((200,
+                JsonConvert.SerializeObject(new Payload { Name = "ok", Value = 4 })));
+            var result = MakeService(transport)
+                .GetAsync<Payload>("https://example.com/api").GetAwaiter().GetResult();
+            Assert.AreEqual("ok", result.Name);
+            Assert.AreEqual(2, transport.Calls.Count);
+        }
+
+        [Test]
+        public void PostAsync_Timeout_DoesNotRetryByDefault()
+        {
+            var transport = new FakeHttpTransport { AlwaysThrowTimeout = true };
+            Assert.Throws<TimeoutException>(() =>
+                MakeService(transport).PostAsync<Payload, Payload>(
+                    "https://example.com/api", new Payload()).GetAwaiter().GetResult());
+            Assert.AreEqual(1, transport.Calls.Count);
+        }
+
+        [Test]
+        public void PostAsync_WithIdempotencyKey_CanRetry()
+        {
+            var transport = new FakeHttpTransport { ThrowTimeoutOnce = true };
+            transport.Responses.Enqueue((200,
+                JsonConvert.SerializeObject(new Payload { Name = "ok" })));
+            var options = new HttpRequestOptions
+            {
+                RetryNonIdempotent = true,
+                IdempotencyKey = "transaction-1",
+            };
+            var result = MakeService(transport).PostAsync<Payload, Payload>(
+                "https://example.com/api", new Payload(), options).GetAwaiter().GetResult();
+            Assert.AreEqual("ok", result.Name);
+            Assert.AreEqual(2, transport.Calls.Count);
         }
 
         static EasyFramework.FrameworkOptions MakeFrameworkOptions()

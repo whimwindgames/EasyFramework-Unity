@@ -1,5 +1,6 @@
 using System;
 using System.Text;
+using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine.Networking;
 
@@ -19,7 +20,8 @@ namespace EasyFramework.Services.Network
     public sealed class UnityWebRequestTransport : IHttpTransport
     {
         public async UniTask<(long statusCode, string body)> SendAsync(
-            HttpMethod method, string url, string jsonBody, HttpRequestOptions options)
+            HttpMethod method, string url, string jsonBody, HttpRequestOptions options,
+            CancellationToken ct)
         {
             using var request = method == HttpMethod.Get
                 ? UnityWebRequest.Get(url)
@@ -31,10 +33,12 @@ namespace EasyFramework.Services.Network
             if (options.Headers != null)
                 foreach (var header in options.Headers)
                     request.SetRequestHeader(header.Key, header.Value);
+            if (!string.IsNullOrWhiteSpace(options.IdempotencyKey))
+                request.SetRequestHeader("Idempotency-Key", options.IdempotencyKey);
 
             try
             {
-                await request.SendWebRequest().ToUniTask();
+                await request.SendWebRequest().ToUniTask(cancellationToken: ct);
             }
             catch (UnityWebRequestException e) when (e.Result == UnityWebRequest.Result.ProtocolError)
             {
@@ -44,7 +48,7 @@ namespace EasyFramework.Services.Network
             catch (UnityWebRequestException e)
             {
                 // 连接错误 / 数据处理错误等瞬时性故障:转换成 TimeoutException 让 HttpService 重试。
-                throw new TimeoutException($"Network error for {url}: {e.Error}");
+                throw new TimeoutException($"Network transport failed: {e.Error}");
             }
 
             return (request.responseCode, request.downloadHandler.text);

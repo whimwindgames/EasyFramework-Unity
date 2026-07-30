@@ -24,6 +24,7 @@ namespace EasyFramework
     /// <summary>业务层快速访问门面。框架内部禁止使用,模块间一律构造注入。</summary>
     public static class G
     {
+        static IObjectResolver _owner;
         public static IEventBus Events { get; private set; }
         public static ITimerService Timer { get; private set; }
         public static IAssetService Asset { get; private set; }
@@ -54,6 +55,7 @@ namespace EasyFramework
 
         internal static void Initialize(IObjectResolver resolver)
         {
+            _owner = resolver;
             Events = resolver.Resolve<IEventBus>();
             Timer = resolver.Resolve<ITimerService>();
             Asset = resolver.Resolve<IAssetService>();
@@ -84,8 +86,15 @@ namespace EasyFramework
             IsInitialized = true;
         }
 
-        internal static void Reset()
+        internal static void Reset() => Reset(null);
+
+        internal static void Reset(IObjectResolver owner)
         {
+            // 旧 Root 在场景切换中晚于新 Root 销毁时,不能清掉新 Root 已绑定的门面。
+            if (owner != null && !ReferenceEquals(owner, _owner))
+                return;
+
+            _owner = null;
             Events = null;
             Timer = null;
             Asset = null;

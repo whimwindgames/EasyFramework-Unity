@@ -16,6 +16,16 @@ namespace EasyFramework.Services.Localization
 
         void OnEnable()
         {
+            LocalizationRuntime.Initialized += OnRuntimeInitialized;
+            Bind();
+        }
+
+        void OnRuntimeInitialized() => Bind();
+
+        void Bind()
+        {
+            _sub?.Dispose();
+            _sub = null;
             if (!LocalizationRuntime.IsInitialized) return;
             _sub = LocalizationRuntime.Events.Subscribe<LocaleChangedEvent>(_ => Refresh());
             Refresh();
@@ -25,6 +35,7 @@ namespace EasyFramework.Services.Localization
         {
             _sub?.Dispose();
             _sub = null;
+            LocalizationRuntime.Initialized -= OnRuntimeInitialized;
         }
 
         public void SetKey(string key)

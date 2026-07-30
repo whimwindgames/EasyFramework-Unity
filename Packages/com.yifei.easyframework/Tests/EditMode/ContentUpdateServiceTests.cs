@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using Cysharp.Threading.Tasks;
 using EasyFramework.Core.Events;
 using EasyFramework.Services.ContentUpdate;
@@ -52,13 +53,14 @@ namespace EasyFramework.Tests
             public int CheckCallCount;
             public int UpdateCallCount;
 
-            public UniTask<List<string>> CheckForCatalogUpdatesAsync()
+            public UniTask<List<string>> CheckForCatalogUpdatesAsync(CancellationToken ct)
             {
                 CheckCallCount++;
                 return UniTask.FromResult(CatalogsWithUpdates);
             }
 
-            public UniTask<bool> UpdateCatalogsAsync(List<string> catalogKeys, IProgress<float> progress)
+            public UniTask<bool> UpdateCatalogsAsync(
+                List<string> catalogKeys, IProgress<float> progress, CancellationToken ct)
             {
                 UpdateCallCount++;
                 return UniTask.FromResult(UpdateSucceeds);
@@ -121,6 +123,10 @@ namespace EasyFramework.Tests
             Assert.IsTrue(result);
             Assert.AreEqual(1, bus.PublishedOf<ContentUpdateAppliedEvent>().Count);
             Assert.AreEqual(0, bus.PublishedOf<ContentUpdateFailedEvent>().Count);
+
+            var second = svc.DownloadAndApplyAsync().GetAwaiter().GetResult();
+            Assert.IsFalse(second, "已应用的 catalog 不能再次应用");
+            Assert.AreEqual(1, gateway.UpdateCallCount);
         }
 
         [Test]
@@ -202,8 +208,10 @@ namespace EasyFramework.Tests
         sealed class FakeAddressablesCatalogGateway : IAddressablesCatalogGateway
         {
             public List<string> CatalogsWithUpdates = new();
-            public UniTask<List<string>> CheckForCatalogUpdatesAsync() => UniTask.FromResult(CatalogsWithUpdates);
-            public UniTask<bool> UpdateCatalogsAsync(List<string> catalogKeys, IProgress<float> progress)
+            public UniTask<List<string>> CheckForCatalogUpdatesAsync(CancellationToken ct)
+                => UniTask.FromResult(CatalogsWithUpdates);
+            public UniTask<bool> UpdateCatalogsAsync(
+                List<string> catalogKeys, IProgress<float> progress, CancellationToken ct)
                 => UniTask.FromResult(true);
         }
 

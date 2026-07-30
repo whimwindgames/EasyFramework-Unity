@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Threading;
 using Cysharp.Threading.Tasks;
 
 namespace EasyFramework.Services.Assets
@@ -20,9 +21,12 @@ namespace EasyFramework.Services.Assets
             _assets = assets;
         }
 
-        public UniTask<T> LoadAsync<T>(string key, AssetScope scope = AssetScope.Scene)
+        public UniTask<T> LoadAsync<T>(
+            string key, AssetScope scope = AssetScope.Scene,
+            CancellationToken ct = default)
             where T : UnityEngine.Object
         {
+            ct.ThrowIfCancellationRequested();
             if (!_assets.TryGetValue(key, out var obj))
                 throw new KeyNotFoundException($"FakeAssetService has no asset for key '{key}'.");
 

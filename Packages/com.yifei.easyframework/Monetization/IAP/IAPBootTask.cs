@@ -22,9 +22,11 @@ namespace EasyFramework.Monetization.IAP
 
         public async UniTask InitializeAsync(CancellationToken ct)
         {
-            var ids = _catalog != null ? _catalog.ProductIds() : new string[0];
-            await _provider.InitializeAsync(ids, ct);
-            _service.ReplayPending();   // 重放上次会话遗留的掉单。
+            var products = _catalog != null
+                ? _catalog.ProductDefinitions()
+                : new IAPProductDefinition[0];
+            await _provider.InitializeAsync(products, ct);
+            await _service.ReplayPendingAsync(ct);
         }
     }
 }

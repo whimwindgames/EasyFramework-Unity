@@ -38,7 +38,7 @@ namespace EasyFramework.Template
         /// 示例 SaveProfile:把框架存档载荷换成 TemplateSaveData。
         /// 改名清单:把 HmacSalt 的值改成你游戏专属盐,避免与其它游戏共用密钥。
         /// </summary>
-        static SaveProfile CreateSaveProfile()
+        internal static SaveProfile CreateSaveProfile()
             => new SaveProfile
             {
                 DataType = typeof(TemplateSaveData),

@@ -54,5 +54,14 @@ namespace EasyFramework.Tests
             Assert.IsFalse(s.ShouldRestore(0.05f));
             Assert.IsTrue(s.ShouldRestore(0.1f));
         }
+
+        [Test]
+        public void Remaining_ReflectsExtendedDeadline()
+        {
+            var state = new HitStopState();
+            state.Request(0.1f, 1f);
+            state.Request(0.2f, 1.05f);
+            Assert.AreEqual(0.15f, state.Remaining(1.1f), 0.0001f);
+        }
     }
 }

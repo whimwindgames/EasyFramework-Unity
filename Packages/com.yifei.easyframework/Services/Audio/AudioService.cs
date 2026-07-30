@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using Cysharp.Threading.Tasks;
 using EasyFramework.Services.Assets;
 using UnityEngine;
@@ -7,7 +8,7 @@ using VContainer.Unity;
 
 namespace EasyFramework.Services.Audio
 {
-    public sealed class AudioService : IAudioService, ITickable
+    public sealed class AudioService : IAudioService, ITickable, IDisposable
     {
         const string BgmKey = "ef.audio.bgm";
         const string SfxKey = "ef.audio.sfx";
@@ -19,6 +20,7 @@ namespace EasyFramework.Services.Audio
         /// <summary>EditMode 测试可替换为 no-op;运行时为 Object.DontDestroyOnLoad
         /// (DontDestroyOnLoad 仅在 Play 模式合法,EditMode 调用会抛异常)。与 UIRootBuilder 同一约定。</summary>
         internal static Action<GameObject> DontDestroyHandler = UnityEngine.Object.DontDestroyOnLoad;
+        internal static Action<GameObject> DestroyHandler = UnityEngine.Object.Destroy;
 
         readonly IAssetService _assets;
         readonly Func<float> _now;
@@ -36,6 +38,8 @@ namespace EasyFramework.Services.Audio
 
         CrossfadeState _fade;
         bool _fadingToStop;     // true:淡出为停止 BGM(无新 clip)
+        int _bgmGeneration;
+        bool _disposed;
 
         /// <summary>生产构造:时间源默认 Time.realtimeSinceStartup。</summary>
         public AudioService(IAssetService assets) : this(assets, () => Time.realtimeSinceStartup) { }
@@ -54,6 +58,7 @@ namespace EasyFramework.Services.Audio
             get => _bgmVolume;
             set
             {
+                ThrowIfDisposed();
                 _bgmVolume = Mathf.Clamp01(value);
                 PlayerPrefs.SetFloat(BgmKey, _bgmVolume);
                 PlayerPrefs.Save();
@@ -66,16 +71,25 @@ namespace EasyFramework.Services.Audio
             get => _sfxVolume;
             set
             {
+                ThrowIfDisposed();
                 _sfxVolume = Mathf.Clamp01(value);
                 PlayerPrefs.SetFloat(SfxKey, _sfxVolume);
                 PlayerPrefs.Save();
             }
         }
 
-        public async UniTask PlayBgmAsync(string key, float fadeSeconds = 0.5f)
+        public async UniTask PlayBgmAsync(
+            string key, float fadeSeconds = 0.5f, CancellationToken ct = default)
         {
+            ThrowIfDisposed();
+            ValidateKey(key);
+            ValidateFade(fadeSeconds);
+            var generation = ++_bgmGeneration;
             EnsureHost();
-            var clip = await _assets.LoadAsync<AudioClip>(key, AssetScope.Global);
+            var clip = await _assets.LoadAsync<AudioClip>(key, AssetScope.Global, ct);
+            ct.ThrowIfCancellationRequested();
+            if (_disposed || generation != _bgmGeneration)
+                return;
 
             var incoming = _aIsActive ? _bgmB : _bgmA;
             incoming.clip = clip;
@@ -91,13 +105,25 @@ namespace EasyFramework.Services.Audio
 
         public void StopBgm(float fadeSeconds = 0.3f)
         {
+            ThrowIfDisposed();
+            ValidateFade(fadeSeconds);
+            _bgmGeneration++;
             if (_host == null) return; // 从未播放过
+            if (fadeSeconds <= 0f)
+            {
+                _bgmA.Stop();
+                _bgmB.Stop();
+                _fade = null;
+                return;
+            }
             _fadingToStop = true;
             _fade = new CrossfadeState(fadeSeconds, 1f);
         }
 
         public void PlaySfx(string key, float volume = 1f)
         {
+            ThrowIfDisposed();
+            ValidateKey(key);
             var now = _now();
             if (_lastSfxPlayTime.TryGetValue(key, out var last) && now - last < MinSfxIntervalSeconds)
                 return; // 同一 key 短时间内重复触发,跳过避免音量堆叠削波
@@ -111,14 +137,23 @@ namespace EasyFramework.Services.Audio
 
         async UniTaskVoid PlaySfxAsync(string key, float volume)
         {
-            var clip = await _assets.LoadAsync<AudioClip>(key, AssetScope.Scene);
-            var src = _sfx[_sfxCursor];
-            _sfxCursor = (_sfxCursor + 1) % SfxVoices;
-            src.PlayOneShot(clip, volume * _sfxVolume);
+            try
+            {
+                var clip = await _assets.LoadAsync<AudioClip>(key, AssetScope.Scene);
+                if (_disposed || _host == null) return;
+                var src = _sfx[_sfxCursor];
+                _sfxCursor = (_sfxCursor + 1) % SfxVoices;
+                src.PlayOneShot(clip, volume * _sfxVolume);
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[EasyFramework] SFX '{key}' could not be played: {e.Message}");
+            }
         }
 
         public void Tick()
         {
+            if (_disposed) return;
             if (_fade == null) return;
             _fade.Advance(Time.unscaledDeltaTime);
             ApplyBgmVolume();
@@ -156,6 +191,7 @@ namespace EasyFramework.Services.Audio
 
         void EnsureHost()
         {
+            ThrowIfDisposed();
             if (_host != null) return;
             _host = new GameObject("[EasyFramework.Audio]");
             DontDestroyHandler(_host);
@@ -169,6 +205,38 @@ namespace EasyFramework.Services.Audio
                 _sfx[i].playOnAwake = false;
             }
             _aIsActive = true; // 约定:active 初始指向 A(下一次 PlayBgm 切到 B 出声)
+        }
+
+        static void ValidateKey(string key)
+        {
+            if (string.IsNullOrWhiteSpace(key))
+                throw new ArgumentException("Audio key is required.", nameof(key));
+        }
+
+        static void ValidateFade(float fadeSeconds)
+        {
+            if (fadeSeconds < 0f || float.IsNaN(fadeSeconds) || float.IsInfinity(fadeSeconds))
+                throw new ArgumentOutOfRangeException(nameof(fadeSeconds));
+        }
+
+        void ThrowIfDisposed()
+        {
+            if (_disposed) throw new ObjectDisposedException(nameof(AudioService));
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _bgmGeneration++;
+            _fade = null;
+            if (_host != null)
+                DestroyHandler(_host);
+            _host = null;
+            _bgmA = null;
+            _bgmB = null;
+            _sfx = null;
+            _lastSfxPlayTime.Clear();
         }
     }
 }

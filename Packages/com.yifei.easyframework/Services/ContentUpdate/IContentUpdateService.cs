@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using Cysharp.Threading.Tasks;
 
 namespace EasyFramework.Services.ContentUpdate
@@ -37,9 +38,10 @@ namespace EasyFramework.Services.ContentUpdate
         bool HasChecked { get; }
 
         /// <summary>启动时已自动检查一次;业务层可在设置页提供"检查更新"按钮再次调用。</summary>
-        UniTask<ContentUpdateInfo> CheckAsync();
+        UniTask<ContentUpdateInfo> CheckAsync(CancellationToken ct = default);
 
         /// <summary>下载并应用检测到的更新。未先调用过 CheckAsync 时会内部先检查一次。</summary>
-        UniTask<bool> DownloadAndApplyAsync(IProgress<float> progress = null);
+        UniTask<bool> DownloadAndApplyAsync(
+            IProgress<float> progress = null, CancellationToken ct = default);
     }
 }

@@ -92,7 +92,7 @@ G.Initialize(resolver)   把已解析服务绑定到 G 门面
 | `G.Asset` | `IAssetService` | `await LoadAsync<T>(key, scope=Scene)` / `ReleaseScope(scope)` |
 | `G.Scene` | `ISceneService` | `await LoadAsync(sceneName, progress?)` / `CurrentScene` |
 | `G.Save` | `ISaveService` | `await LoadAsync()` / `Save()` / `Data<T>()` |
-| `G.Config` | `IConfigService` | `Get<T>(key, defaultValue)` / `Has(key)` |
+| `G.Config` | `IConfigService` | `Get<T>(key, defaultValue)` / `Has(key)` / `await RefreshRemoteAsync(ct)` |
 | `G.Pool` | `IPoolService` | `await SpawnAsync(key, pos?, rot?, parent?)` / `Despawn(go)` / `await PrewarmAsync(key, count)` |
 | `G.UI` | `IUIService` | `await PushAsync<W>()` / `PopAsync()` / `PopAllAsync()` / `await ShowPopupAsync<P, R>()` / `await ShowHudAsync<H>()` / `HideHudAsync()` |
 | `G.Audio` | `IAudioService` | `await PlayBgmAsync(key, fade=0.5f)` / `StopBgm(fade=0.3f)` / `PlaySfx(key, vol=1f)` |
@@ -118,7 +118,8 @@ G.Initialize(resolver)   把已解析服务绑定到 G 门面
 
 1. 经 Package Manager → Samples 导入 **Template**,把导入后的目录复制改名为你的游戏(详细改名清单见 Template 的 `README.md`)。
 2. 改命名空间 `EasyFramework.Template` → `<YourGame>`,改类名 `Template*` → `<YourGame>*`。
-3. 打开 `Assets/Scenes/Boot.unity`,在 `[EasyFramework]`(挂 `RootLifetimeScope`)下新建子 GameObject,
+3. 打开 `Assets/Scenes/Boot.unity`,在 `[EasyFramework]` 上挂游戏自己的 `RootLifetimeScope` 子类,
+   并在其下新建子 GameObject,
    挂你的 `<YourGame>LifetimeScope`(嵌套 `LifetimeScope` 自动成为 Root 的子作用域)。
 4. 用 `StateMachine<TContext>` 写流程(Menu / Gameplay / Result),用 `G.UI` 建界面,
    用 `G.Pool` 管玩法对象,用 `G.Save` 存档。
@@ -152,18 +153,37 @@ OnSetup(args)  →  PlayEnter()  →  (显示)  →  PlayExit()  →  (销毁)
 
 ## 五、SDK 接入槽
 
-商业化层为「接口 + 适配器」:编辑器 / 测试一律用 Fake,真机接真实 SDK **不改业务代码**。
+商业化层为「接口 + 适配器」:编辑器 / 开发包默认用 Fake,正式包接真实 SDK **不改业务代码**。
+所有根服务适配器必须在 `RootLifetimeScope.ConfigureFrameworkOptions` 中配置。VContainer 的父容器
+看不到子 `GameLifetimeScope` 的注册,因此不能在子作用域覆盖广告、IAP、统计或远程配置。
 
 | 槽 | 默认(编辑器 / 测试) | 接入真实 SDK |
 |---|---|---|
-| 广告 `IAdsProvider` | `FakeAdsProvider`(秒回成功) | 定义 `EF_ADMOB`,填充 `AdMobAdsProvider`,在 `GameLifetimeScope` 覆盖注册 `IAdsProvider` |
-| 内购 `IIAPProvider` | `FakeIAPProvider`(编辑器)/ `UnityIAPProvider`(真机) | Unity IAP 官方包已接,配置 catalog / 密钥即可 |
-| 统计 `IAnalyticsBackend` | `DebugAnalyticsBackend`(控制台打印) | 定义 `EF_FIREBASE`,填充 `FirebaseAnalyticsBackend`,在 `GameLifetimeScope` 追加注册一个 `IAnalyticsBackend`(多后端广播) |
-| 远程配置 `IRemoteConfigProvider` | `NoopRemoteConfigProvider`(空) | 实现 `IRemoteConfigProvider` 覆盖注册 |
+| 广告 `IAdsProvider` | 编辑器/开发包 `Fake`;正式包 `Unavailable` | `options.AdsProviderFactory = ...`;未配置时正式包永不返回 `Completed` |
+| 内购 `IIAPProvider` | 编辑器/开发包 `Fake`;正式包 Unity IAP 5 | `options.IAPProviderFactory = ...`;商品类型由 `ProductCatalog` 映射 |
+| 验签 `IIAPReceiptValidator` | 编辑器/开发包放行 Fake;正式包拒绝 | `options.IAPReceiptValidatorFactory = ...`,接游戏服务端验签 |
+| 统计后端 | 编辑器/开发包 Console;正式包空列表 | `options.AnalyticsBackendsFactory = ...` |
+| 远程配置 | `NoopRemoteConfigProvider` | `options.RemoteConfigProviderFactory = ...` |
 | 存档后端 `ISaveBackend`(云存档,v1 未做) | 本地文件 | 预留接口 |
 
-> 真实 SDK 适配器(`AdMobAdsProvider` / `FirebaseAnalyticsBackend`)用 `#if EF_ADMOB` / `#if EF_FIREBASE`
-> 包住,默认未定义符号故不参与编译 —— **它们是接入槽,不是占位符**,文件头注明四步接入流程。
+```csharp
+public sealed class MyRootLifetimeScope : RootLifetimeScope
+{
+    protected override void ConfigureFrameworkOptions(FrameworkOptions options)
+    {
+        options.AdsProviderFactory = resolver => new MyAdsProvider();
+        options.IAPReceiptValidatorFactory = resolver =>
+            new ServerReceiptValidator(resolver.Resolve<IHttpService>());
+        options.RemoteConfigProviderFactory = resolver => new MyRemoteConfigProvider();
+        options.AnalyticsBackendsFactory = resolver =>
+            new IAnalyticsBackend[] { new MyAnalyticsBackend() };
+    }
+}
+```
+
+IAP 的 `ProcessPurchase` 会保持 Pending。交易先写入 `iap-transactions.json`,通过验签并由
+`SetRewardHandler((transaction, ct) => ...)` 成功发奖后才向商店确认。发奖实现必须用
+`transaction.TransactionId` 做幂等;否则应用恰好在发奖后、journal 落盘前退出时仍可能重复发奖。
 
 ---
 
@@ -192,8 +212,13 @@ public static void SetHighScore(int value) { /* ... */ }
 
 | 层 | 策略 |
 |---|---|
-| Core / 服务业务逻辑 | EditMode 单测(状态机、对象池、存档迁移、事件、UI 栈/队列、广告频控、IAP 掉单、计分逻辑、作弊扫描…) |
-| 表现层 / SDK 真机路径 | Fake 覆盖业务流转 + 真机冒烟(TapRush 即整框架的 PlayMode 验收) |
+| Core / 服务业务逻辑 | 206 项 EditMode 单测(状态机、对象池、存档迁移、事件、UI、HTTP 幂等重试、IAP Pending/验签/补单等) |
+| 运行时生命周期 | 3 项 PlayMode 冒烟(淡出遮罩、音频宿主释放、正式广告安全关闭) |
+| SDK 真机路径 | Fake 覆盖业务流转 + iOS/Android 商店沙盒与广告测试设备验收 |
 
-运行:Unity Test Runner → EditMode 选项卡;或脚本 `run_tests(mode="EditMode")`。
+运行:Unity Test Runner 的 EditMode / PlayMode 选项卡;CI 或本机可执行:
+
+```bash
+UNITY_EDITOR="/path/to/Unity" ./scripts/run-unity-tests.sh
+```
 薄视觉 / 平台层(`OnGUI` 角标、Cinemachine / PrimeTween 调用、UI 代码构建外观)不写单测,靠 PlayMode 冒烟把关。

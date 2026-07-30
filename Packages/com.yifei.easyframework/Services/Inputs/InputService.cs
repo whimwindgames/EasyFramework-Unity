@@ -24,6 +24,7 @@ namespace EasyFramework.Services.Inputs
         readonly PinchDetector _pinch;
 
         bool _pointerWasDown;
+        bool _pointerBlockedByUi;
 
         public Vector2 MoveAxis { get; private set; }
         public bool IsPointerOverUI { get; private set; }
@@ -38,11 +39,18 @@ namespace EasyFramework.Services.Inputs
         public void Tick()
         {
             var time = Time.unscaledTime;
-            IsPointerOverUI = EventSystem.current != null
-                && EventSystem.current.IsPointerOverGameObject();
-
-            FeedPointer(time);
-            FeedPinch();
+            _gestures.PixelScale = Screen.dpi > 0f ? Screen.dpi / 160f : 1f;
+            var pinching = FeedPinch();
+            if (pinching)
+            {
+                _gestures.Cancel();
+                _pointerWasDown = false;
+                _pointerBlockedByUi = false;
+            }
+            else
+            {
+                FeedPointer(time);
+            }
             MoveAxis = ResolveMoveAxis();
         }
 
@@ -56,31 +64,58 @@ namespace EasyFramework.Services.Inputs
             {
                 pos = touch.primaryTouch.position.ReadValue();
                 down = true;
+                IsPointerOverUI = IsOverUi(touch.primaryTouch.touchId.ReadValue());
             }
             else if (touch != null && touch.primaryTouch.press.wasReleasedThisFrame)
             {
                 pos = touch.primaryTouch.position.ReadValue();
                 down = false;
+                IsPointerOverUI = false;
             }
             else
             {
                 var mouse = Mouse.current;
-                if (mouse == null) { HandleRelease(time); return; }
+                if (mouse == null)
+                {
+                    IsPointerOverUI = false;
+                    HandleRelease(time);
+                    return;
+                }
                 pos = mouse.position.ReadValue();
                 down = mouse.leftButton.isPressed;
+                IsPointerOverUI = IsOverUi();
             }
 
-            if (down && !_pointerWasDown) { _gestures.OnPointerDown(pos, time); _pointerWasDown = true; }
+            if (down && !_pointerWasDown)
+            {
+                _pointerBlockedByUi = IsPointerOverUI;
+                _pointerWasDown = true;
+                if (!_pointerBlockedByUi)
+                    _gestures.OnPointerDown(pos, time);
+            }
+            else if (down && _pointerBlockedByUi) { }
             else if (down && _pointerWasDown) { _gestures.OnPointerMove(pos, time); }
-            else if (!down && _pointerWasDown) { _gestures.OnPointerUp(pos, time); _pointerWasDown = false; }
+            else if (!down && _pointerWasDown)
+            {
+                if (!_pointerBlockedByUi)
+                    _gestures.OnPointerUp(pos, time);
+                _pointerWasDown = false;
+                _pointerBlockedByUi = false;
+            }
         }
 
         void HandleRelease(float time)
         {
-            if (_pointerWasDown) { _gestures.OnPointerUp(Vector2.zero, time); _pointerWasDown = false; }
+            if (_pointerWasDown)
+            {
+                if (!_pointerBlockedByUi)
+                    _gestures.OnPointerUp(Vector2.zero, time);
+                _pointerWasDown = false;
+                _pointerBlockedByUi = false;
+            }
         }
 
-        void FeedPinch()
+        bool FeedPinch()
         {
             var touch = Touchscreen.current;
             if (touch != null && touch.touches.Count >= 2
@@ -88,12 +123,22 @@ namespace EasyFramework.Services.Inputs
             {
                 _pinch.Update(touch.touches[0].position.ReadValue(),
                               touch.touches[1].position.ReadValue());
+                IsPointerOverUI = IsOverUi(touch.touches[0].touchId.ReadValue()) ||
+                                  IsOverUi(touch.touches[1].touchId.ReadValue());
+                return true;
             }
             else
             {
                 _pinch.Reset();
+                return false;
             }
         }
+
+        static bool IsOverUi(int pointerId = -1)
+            => EventSystem.current != null &&
+               (pointerId >= 0
+                   ? EventSystem.current.IsPointerOverGameObject(pointerId)
+                   : EventSystem.current.IsPointerOverGameObject());
 
         Vector2 ResolveMoveAxis()
         {

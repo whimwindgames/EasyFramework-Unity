@@ -1,0 +1,18 @@
+{
+  "name": "EasyFramework.Tests.PlayMode",
+  "rootNamespace": "EasyFramework.Tests.PlayMode",
+  "references": [
+    "EasyFramework.Core",
+    "EasyFramework.Services",
+    "EasyFramework.Monetization",
+    "UniTask",
+    "PrimeTween.Runtime",
+    "UnityEngine.TestRunner"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "precompiledReferences": ["nunit.framework.dll"],
+  "defineConstraints": ["UNITY_INCLUDE_TESTS"],
+  "overrideReferences": true,
+  "autoReferenced": false
+}

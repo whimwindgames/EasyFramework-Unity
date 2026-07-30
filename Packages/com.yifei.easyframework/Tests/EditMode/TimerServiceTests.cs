@@ -1,5 +1,6 @@
 using EasyFramework.Core.Timing;
 using NUnit.Framework;
+using UnityEngine.TestTools;
 
 namespace EasyFramework.Tests
 {
@@ -59,6 +60,40 @@ namespace EasyFramework.Tests
             svc.Advance(0.6f, 0.6f);
             svc.Advance(0.6f, 0.6f);
             Assert.AreEqual(1, fired);
+        }
+
+        [Test]
+        public void Repeat_RejectsZeroOrNegativeInterval()
+        {
+            var service = new TimerService();
+            Assert.Throws<System.ArgumentOutOfRangeException>(() =>
+                service.Schedule(0f, () => { }, repeat: true));
+            Assert.Throws<System.ArgumentOutOfRangeException>(() =>
+                service.Schedule(-1f, () => { }));
+        }
+
+        [Test]
+        public void Repeat_CapsCatchUpCallbacks()
+        {
+            var service = new TimerService();
+            var fired = 0;
+            service.Schedule(0.01f, () => fired++, repeat: true);
+            service.Advance(100f, 100f);
+            Assert.AreEqual(TimerService.MaxCatchUpCallbacksPerAdvance, fired);
+        }
+
+        [Test]
+        public void ThrowingCallback_DoesNotBreakIterationState()
+        {
+            var service = new TimerService();
+            var later = 0;
+            LogAssert.Expect(UnityEngine.LogType.Exception, "Exception: boom");
+            service.Schedule(0f, () => throw new System.Exception("boom"));
+            service.Schedule(0f, () => later++);
+            service.Advance(0f, 0f);
+            service.Schedule(0f, () => later++);
+            service.Advance(0f, 0f);
+            Assert.AreEqual(2, later);
         }
     }
 }

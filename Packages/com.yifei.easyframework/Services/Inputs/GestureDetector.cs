@@ -12,6 +12,14 @@ namespace EasyFramework.Services.Inputs
         public const float SwipeMaxDuration = 0.5f;
 
         readonly IGestureEmitter _emitter;
+        float _pixelScale = 1f;
+
+        /// <summary>把逻辑阈值换算为当前设备像素;160 DPI 时为 1。</summary>
+        public float PixelScale
+        {
+            get => _pixelScale;
+            set => _pixelScale = Mathf.Max(0.1f, value);
+        }
 
         bool _down;
         Vector2 _startPos;
@@ -36,7 +44,7 @@ namespace EasyFramework.Services.Inputs
             if (!_down) return;
             var totalDist = Vector2.Distance(pos, _startPos);
 
-            if (!_dragging && totalDist >= MoveThreshold)
+            if (!_dragging && totalDist >= MoveThreshold * _pixelScale)
             {
                 _dragging = true;
                 _emitter.Emit(new DragEvent(DragPhase.Start, pos, pos - _startPos));
@@ -52,7 +60,7 @@ namespace EasyFramework.Services.Inputs
             }
 
             // 仍静止:检查长按
-            if (!_longPressFired && totalDist < MoveThreshold
+            if (!_longPressFired && totalDist < MoveThreshold * _pixelScale
                 && time - _startTime >= LongPressDuration)
             {
                 _longPressFired = true;
@@ -77,17 +85,25 @@ namespace EasyFramework.Services.Inputs
 
             if (_longPressFired) return; // 已长按,松手不再判其它
 
-            if (dist >= SwipeMinDistance && duration < SwipeMaxDuration)
+            if (dist >= SwipeMinDistance * _pixelScale && duration < SwipeMaxDuration)
             {
                 _emitter.Emit(new SwipeEvent(_startPos, pos, MainAxis(delta)));
                 return;
             }
 
-            if (dist < MoveThreshold && duration < TapMaxDuration)
+            if (dist < MoveThreshold * _pixelScale && duration < TapMaxDuration)
             {
                 _emitter.Emit(new TapEvent(pos));
             }
             // 其余(慢速大位移但未触发 drag 等)不发任何事件
+        }
+
+        /// <summary>系统接管触摸(例如双指缩放或 UI)时丢弃当前单指状态。</summary>
+        public void Cancel()
+        {
+            _down = false;
+            _dragging = false;
+            _longPressFired = false;
         }
 
         static SwipeDirection MainAxis(Vector2 d)

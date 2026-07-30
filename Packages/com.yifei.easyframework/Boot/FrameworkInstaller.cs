@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using EasyFramework.Core.Boot;
 using EasyFramework.Core.Events;
@@ -43,6 +44,28 @@ namespace EasyFramework
         public string DefaultLocale = "zh-CN";
         /// <summary>内购商品目录;可空(为 null 时框架用空 catalog,无商品)。</summary>
         public ProductCatalog ProductCatalog;
+        /// <summary>
+        /// 远程配置适配器工厂。必须在根容器构建前设置;子 LifetimeScope 无法覆盖已构造的根服务。
+        /// 为 null 时使用不返回任何远程值的安全实现。
+        /// </summary>
+        public Func<IObjectResolver, IRemoteConfigProvider> RemoteConfigProviderFactory;
+        /// <summary>
+        /// 广告适配器工厂。编辑器/开发包默认使用 Fake;正式包未配置时使用安全关闭实现,
+        /// 永远不会把奖励广告报告为完成。
+        /// </summary>
+        public Func<IObjectResolver, IAdsProvider> AdsProviderFactory;
+        /// <summary>
+        /// 统计后端工厂。编辑器/开发包默认输出到 Console;正式包默认不发送任何数据。
+        /// </summary>
+        public Func<IObjectResolver, IReadOnlyList<IAnalyticsBackend>> AnalyticsBackendsFactory;
+        /// <summary>内购商店适配器工厂;必须在根容器构建前设置。</summary>
+        public Func<IObjectResolver, IIAPProvider> IAPProviderFactory;
+        /// <summary>
+        /// 内购收据验签工厂。编辑器/开发包默认放行 Fake 收据;正式包未配置时拒绝发奖。
+        /// </summary>
+        public Func<IObjectResolver, IIAPReceiptValidator> IAPReceiptValidatorFactory;
+        /// <summary>内购交易日志文件名;默认 iap-transactions.json。</summary>
+        public string IAPTransactionFileName = "iap-transactions.json";
     }
 
     /// <summary>框架服务注册(纯逻辑,便于脱离 MonoBehaviour 测试)。入口点注册在 RootLifetimeScope。</summary>
@@ -79,7 +102,9 @@ namespace EasyFramework
             builder.Register<SaveBootTask>(Lifetime.Singleton).As<IBootTask>();
 
             // ---- Config(Phase 2)----
-            builder.Register<IRemoteConfigProvider, NoopRemoteConfigProvider>(Lifetime.Singleton);
+            builder.Register<IRemoteConfigProvider>(c =>
+                CreateRequired(options.RemoteConfigProviderFactory, c, () => new NoopRemoteConfigProvider(),
+                    nameof(options.RemoteConfigProviderFactory)), Lifetime.Singleton);
             var tables = options.ConfigTables ?? new List<ConfigTable>();
             builder.Register<ConfigService>(c => new ConfigService(tables, c.Resolve<IRemoteConfigProvider>()),
                 Lifetime.Singleton).As<IConfigService>().AsSelf();
@@ -89,7 +114,8 @@ namespace EasyFramework
             // 通用 HTTP 基础设施,所有游戏都可能用到。UnityWebRequestTransport 是唯一发起真实网络请求的实现;
             // EditMode 测试通过注入 FakeHttpTransport 验证 HttpService 的重试/超时/反序列化逻辑。
             builder.Register<IHttpTransport, UnityWebRequestTransport>(Lifetime.Singleton);
-            builder.Register<HttpService>(Lifetime.Singleton).As<IHttpService>().AsSelf();
+            builder.Register<HttpService>(c => new HttpService(c.Resolve<IHttpTransport>()),
+                Lifetime.Singleton).As<IHttpService>().AsSelf();
 
             // ---- Pool(Phase 2; idle auto-shrink added later)----
             // 工厂 lambda 显式走 3 参生产构造:PoolService 另有一个 internal(IAssetService,IEventBus,
@@ -134,19 +160,17 @@ namespace EasyFramework
             builder.Register<HapticsService>(Lifetime.Singleton).As<IHapticsService>();
 
             // ---- Analytics(Phase 4)----
-            // 后端多注册:DebugAnalyticsBackend(编辑器/调试)。真机接 Firebase 时,
-            // 在 GameLifetimeScope 追加注册 IAnalyticsBackend -> FirebaseAnalyticsBackend(#if EF_FIREBASE)。
-            builder.Register<IAnalyticsBackend, DebugAnalyticsBackend>(Lifetime.Singleton);
-            builder.Register<IAnalyticsService>(c =>
-                new AnalyticsService(new List<IAnalyticsBackend>(c.Resolve<IReadOnlyList<IAnalyticsBackend>>())),
-                Lifetime.Singleton);
+            builder.Register<IAnalyticsService>(c => new AnalyticsService(
+                options.AnalyticsBackendsFactory != null
+                    ? options.AnalyticsBackendsFactory(c)
+                    : CreateDefaultAnalyticsBackends()), Lifetime.Singleton);
             // 自动标准事件订阅(BootCompleted / SceneLoaded)。
             builder.RegisterEntryPoint<AnalyticsAutoTracker>();
 
             // ---- Ads(Phase 4)----
-            // Fake provider 在编辑器与真机都注册(保证真机也能跑通);接 AdMob/LevelPlay 时,
-            // 在 GameLifetimeScope 覆盖注册 IAdsProvider -> AdMobAdsProvider(#if EF_ADMOB)。
-            builder.Register<IAdsProvider, FakeAdsProvider>(Lifetime.Singleton);
+            builder.Register<IAdsProvider>(c =>
+                CreateRequired(options.AdsProviderFactory, c, CreateDefaultAdsProvider,
+                    nameof(options.AdsProviderFactory)), Lifetime.Singleton);
             // 工厂 lambda 显式走 3 参生产构造:AdsService 另有一个 internal(IAdsProvider,IConfigService,
             // IAnalyticsService,Func<float>)测试构造,VContainer 自动选最长构造会去解析未注册的 Func<float> 而失败
             // (与上方 ISceneTransition/SceneService 同因)。这里固定调公开构造,Func<float> 默认走 Time.realtimeSinceStartup。
@@ -161,14 +185,22 @@ namespace EasyFramework
             if (catalog == null)
                 catalog = ScriptableObject.CreateInstance<ProductCatalog>(); // 空目录兜底,可空契约。
             builder.RegisterInstance(catalog);
-#if UNITY_EDITOR
-            // 编辑器走 Fake,EditMode 测试与编辑器联调均不触真实 SDK。
-            builder.Register<IIAPProvider, FakeIAPProvider>(Lifetime.Singleton);
-#else
-            // 真机:Unity IAP 真实现(官方包)。这是接入槽,换其它商店 SDK 适配器也在此替换。
-            builder.Register<IIAPProvider, UnityIAPProvider>(Lifetime.Singleton);
-#endif
-            builder.Register<IAPService>(Lifetime.Singleton).As<IIAPService>().AsSelf();
+            builder.Register<IIAPProvider>(c =>
+                CreateRequired(options.IAPProviderFactory, c, CreateDefaultIAPProvider,
+                    nameof(options.IAPProviderFactory)), Lifetime.Singleton);
+            builder.Register<IIAPReceiptValidator>(c =>
+                CreateRequired(options.IAPReceiptValidatorFactory, c,
+                    CreateDefaultReceiptValidator,
+                    nameof(options.IAPReceiptValidatorFactory)), Lifetime.Singleton);
+            builder.Register<IIAPTransactionStore>(_ => new JsonIAPTransactionStore(
+                options.SaveDirectory, options.IAPTransactionFileName), Lifetime.Singleton);
+            builder.Register<IAPService>(c => new IAPService(
+                    c.Resolve<IIAPProvider>(),
+                    c.Resolve<ProductCatalog>(),
+                    c.Resolve<IAnalyticsService>(),
+                    c.Resolve<IIAPReceiptValidator>(),
+                    c.Resolve<IIAPTransactionStore>()),
+                Lifetime.Singleton).As<IIAPService>().AsSelf();
             builder.Register<IAPBootTask>(Lifetime.Singleton).As<IBootTask>();
 
             // ---- ContentUpdate(资源热更新)----
@@ -189,5 +221,49 @@ namespace EasyFramework
                 FileName = "save.json",
                 HmacSalt = "easyframework",
             };
+
+        static T CreateRequired<T>(Func<IObjectResolver, T> factory, IObjectResolver resolver,
+            Func<T> fallback, string optionName) where T : class
+        {
+            var value = factory != null ? factory(resolver) : fallback();
+            return value ?? throw new InvalidOperationException(
+                $"FrameworkOptions.{optionName} returned null.");
+        }
+
+        static IAdsProvider CreateDefaultAdsProvider()
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            return new FakeAdsProvider();
+#else
+            return new UnavailableAdsProvider();
+#endif
+        }
+
+        static IReadOnlyList<IAnalyticsBackend> CreateDefaultAnalyticsBackends()
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            return new IAnalyticsBackend[] { new DebugAnalyticsBackend() };
+#else
+            return Array.Empty<IAnalyticsBackend>();
+#endif
+        }
+
+        static IIAPProvider CreateDefaultIAPProvider()
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            return new FakeIAPProvider();
+#else
+            return new UnityIAPProvider();
+#endif
+        }
+
+        static IIAPReceiptValidator CreateDefaultReceiptValidator()
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            return new DevelopmentIAPReceiptValidator();
+#else
+            return new UnavailableIAPReceiptValidator();
+#endif
+        }
     }
 }

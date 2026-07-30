@@ -20,5 +20,6 @@ namespace EasyFramework.Services.Configs
     {
         T Get<T>(string key, T defaultValue);
         bool Has(string key);
+        UniTask RefreshRemoteAsync(CancellationToken ct = default);
     }
 }

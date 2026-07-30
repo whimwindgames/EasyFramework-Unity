@@ -42,6 +42,13 @@ namespace EasyFramework.Tests
             public UniTask InitializeAsync(CancellationToken ct) => UniTask.CompletedTask;
         }
 
+        sealed class CancelledTask : IBootTask
+        {
+            public int Priority => 0;
+            public bool IsCritical => false;
+            public UniTask InitializeAsync(CancellationToken ct) => UniTask.FromCanceled(ct);
+        }
+
         sealed class SlowTask : IBootTask
         {
             readonly int _delayMs;
@@ -141,6 +148,19 @@ namespace EasyFramework.Tests
             // 未超阈值不应打印耗时日志;仅允许 BootCompletedEvent 之外没有额外 Log。
             bootstrap.StartAsync(CancellationToken.None).GetAwaiter().GetResult();
             LogAssert.NoUnexpectedReceived();
+        }
+
+        [Test]
+        public void Cancellation_IsNotSwallowedByNonCriticalTask()
+        {
+            var cancellation = new CancellationTokenSource();
+            cancellation.Cancel();
+            var bus = new FakeBus();
+            var bootstrap = new GameBootstrap(new IBootTask[] { new CancelledTask() }, bus);
+
+            Assert.Throws<OperationCanceledException>(() =>
+                bootstrap.StartAsync(cancellation.Token).GetAwaiter().GetResult());
+            CollectionAssert.IsEmpty(bus.Published);
         }
     }
 }

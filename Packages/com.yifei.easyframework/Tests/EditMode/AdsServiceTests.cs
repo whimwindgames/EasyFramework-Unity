@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Threading;
 using Cysharp.Threading.Tasks;
 using EasyFramework.Monetization.Ads;
 using EasyFramework.Monetization.Analytics;
@@ -17,6 +18,8 @@ namespace EasyFramework.Tests
             public T Get<T>(string key, T defaultValue)
                 => _values.TryGetValue(key, out var v) ? (T)v : defaultValue;
             public bool Has(string key) => _values.ContainsKey(key);
+            public UniTask RefreshRemoteAsync(CancellationToken ct = default)
+                => UniTask.CompletedTask;
         }
 
         sealed class FakeAnalytics : IAnalyticsService

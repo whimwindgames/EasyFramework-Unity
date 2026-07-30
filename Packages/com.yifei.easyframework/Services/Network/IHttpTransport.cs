@@ -1,3 +1,4 @@
+using System.Threading;
 using Cysharp.Threading.Tasks;
 
 namespace EasyFramework.Services.Network
@@ -7,6 +8,7 @@ namespace EasyFramework.Services.Network
     public interface IHttpTransport
     {
         UniTask<(long statusCode, string body)> SendAsync(
-            HttpMethod method, string url, string jsonBody, HttpRequestOptions options);
+            HttpMethod method, string url, string jsonBody, HttpRequestOptions options,
+            CancellationToken ct);
     }
 }

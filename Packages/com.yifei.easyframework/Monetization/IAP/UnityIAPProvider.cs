@@ -1,139 +1,312 @@
-// ===========================================================================
-// UnityIAPProvider —— Unity IAP(com.unity.purchasing)真实现,仅真机路径。
-//
-// 官方包,真实现非占位符。但其异步回调链路只在真机(配置好 IAP catalog 与
-// 商店密钥)上可跑通,EditMode 无法稳定驱动,故不写 EditMode 单测;编辑器与
-// 全部 EditMode 测试走 FakeIAPProvider(FrameworkInstaller 在 #if UNITY_EDITOR
-// 下注册 Fake,真机注册本类)。Unity IAP API 名/签名以工程安装版本为准——
-// 验证代理用 unity_reflect 核对后等效调整,IIAPProvider 契约不变。
-//
-// 超时 / 取消策略:
-//   InitializeAsync — 观察传入的 CancellationToken(ct.Register→TrySetCanceled);
-//                     另加 InitTimeoutMs(默认 15 s)兜底,避免商店永不回调致永久 pending。
-//   PurchaseAsync   — 无商店超时时用户可能永久挂起弹窗;加 PurchaseTimeoutMs(默认 120 s)
-//                     的竞态超时,超时后 TrySetCanceled + 返回 FailureReason="timeout"。
-//                     IIAPProvider 契约签名不变(PurchaseAsync 无 CancellationToken 参数)。
-// ===========================================================================
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using Cysharp.Threading.Tasks;
-using UnityEngine;
 using UnityEngine.Purchasing;
 
 namespace EasyFramework.Monetization.IAP
 {
-    public sealed class UnityIAPProvider : IIAPProvider, IDetailedStoreListener
+    /// <summary>
+    /// Unity IAP 5 适配器。所有新购与恢复交易都保持 Pending;只有 IAPService 完成验签、
+    /// 持久化和幂等发奖后才 ConfirmPurchase。
+    /// </summary>
+    public sealed class UnityIAPProvider : IIAPProvider, IDisposable
     {
-        /// <summary>初始化超时(毫秒)。默认 15 000 ms;真机接入时可按需调大。</summary>
         public int InitTimeoutMs = 15_000;
-
-        /// <summary>单笔购买超时(毫秒)。默认 120 000 ms;用于用户挂起弹窗或商店进程被杀的兜底。</summary>
         public int PurchaseTimeoutMs = 120_000;
 
-        IStoreController _controller;
-        IExtensionProvider _extensions;
-        UniTaskCompletionSource _initTcs;
+        public event Action<PurchaseTransaction> PendingPurchaseReceived;
+
+        readonly Dictionary<string, PendingOrder> _pendingOrders = new();
+        StoreController _controller;
+        UniTaskCompletionSource<List<Product>> _productsTcs;
+        UniTaskCompletionSource<Orders> _purchasesTcs;
         UniTaskCompletionSource<PurchaseResult> _purchaseTcs;
+        string _activeProductId;
+        bool _initialized;
+        bool _disposed;
 
-        public bool IsInitialized => _controller != null;
+        public bool IsInitialized => _initialized && !_disposed;
 
-        public async UniTask InitializeAsync(IReadOnlyList<string> productIds, CancellationToken ct)
+        public async UniTask InitializeAsync(
+            IReadOnlyList<IAPProductDefinition> products, CancellationToken ct)
         {
+            ThrowIfDisposed();
             if (IsInitialized) return;
-            _initTcs = new UniTaskCompletionSource();
 
-            // 观察外部取消令牌:商店永不回调时上层可取消。
-            CancellationTokenRegistration ctReg = ct.Register(
-                () => _initTcs.TrySetCanceled(), useSynchronizationContext: false);
+            _controller = UnityIAPServices.StoreController();
+            Subscribe();
+            _controller.ProcessPendingOrdersOnPurchasesFetched(false);
 
-            var builder = ConfigurationBuilder.Instance(StandardPurchasingModule.Instance());
-            // 类型未知时按 Consumable 注册兜底;实际类型由业务侧 catalog 决定,真机接入时映射。
-            foreach (var id in productIds)
-                builder.AddProduct(id, UnityEngine.Purchasing.ProductType.Consumable);
+            var connectTask = _controller.Connect().AsUniTask();
+            if (await connectTask.AttachExternalCancellation(ct)
+                    .TimeoutWithoutException(TimeSpan.FromMilliseconds(InitTimeoutMs)))
+                throw new TimeoutException("Unity IAP store connection timed out.");
 
-            UnityPurchasing.Initialize(this, builder);
+            _productsTcs = new UniTaskCompletionSource<List<Product>>();
+            var definitions = new List<UnityEngine.Purchasing.ProductDefinition>();
+            if (products != null)
+            {
+                foreach (var product in products)
+                {
+                    if (!string.IsNullOrWhiteSpace(product.Id))
+                        definitions.Add(new UnityEngine.Purchasing.ProductDefinition(
+                            product.Id, ToUnityProductType(product.Type)));
+                }
+            }
 
+            _controller.FetchProducts(definitions);
+            var (productsTimedOut, _) = await _productsTcs.Task
+                .AttachExternalCancellation(ct)
+                .TimeoutWithoutException(TimeSpan.FromMilliseconds(InitTimeoutMs));
+            if (productsTimedOut)
+                throw new TimeoutException("Unity IAP product fetch timed out.");
+
+            _initialized = true;
+            await FetchExistingPurchasesAsync(ct, InitTimeoutMs);
+        }
+
+        public async UniTask<PurchaseResult> PurchaseAsync(
+            string productId, CancellationToken ct = default)
+        {
+            ThrowIfDisposed();
+            if (!IsInitialized)
+                return Failed(productId, "not_initialized");
+            if (_purchaseTcs != null)
+                return Failed(productId, "purchase_in_progress");
+            if (_controller.GetProductById(productId) == null)
+                return Failed(productId, "unknown_store_product");
+
+            var completion = new UniTaskCompletionSource<PurchaseResult>();
+            _purchaseTcs = completion;
+            _activeProductId = productId;
             try
             {
-                // 竞态:SDK 回调 vs CancellationToken vs 超时兜底。
-                await _initTcs.Task.TimeoutWithoutException(TimeSpan.FromMilliseconds(InitTimeoutMs));
+                _controller.PurchaseProduct(productId);
+                var (isTimeout, result) = await completion.Task
+                    .AttachExternalCancellation(ct)
+                    .TimeoutWithoutException(TimeSpan.FromMilliseconds(PurchaseTimeoutMs));
+                return isTimeout ? Failed(productId, "timeout") : result;
             }
             finally
             {
-                ctReg.Dispose();
+                if (ReferenceEquals(_purchaseTcs, completion))
+                {
+                    _purchaseTcs = null;
+                    _activeProductId = null;
+                }
             }
         }
 
-        public async UniTask<PurchaseResult> PurchaseAsync(string productId)
+        public async UniTask RestoreAsync(CancellationToken ct = default)
         {
+            ThrowIfDisposed();
             if (!IsInitialized)
-                return new PurchaseResult
-                { Success = false, ProductId = productId, FailureReason = "not_initialized" };
+                throw new InvalidOperationException("Unity IAP is not initialized.");
 
-            _purchaseTcs = new UniTaskCompletionSource<PurchaseResult>();
-            _controller.InitiatePurchase(productId);
-
-            // 带超时的竞态等待:防止商店永不回调(用户挂起弹窗/网络卡死/商店进程被杀)。
-            // TimeoutWithoutException<T> 返回 (bool IsTimeout, T Result)。
-            var (isTimeout, result) = await _purchaseTcs.Task
+            var completion = new UniTaskCompletionSource<(bool success, string error)>();
+            _controller.RestoreTransactions((success, error) =>
+                completion.TrySetResult((success, error)));
+            var (isTimeout, restore) = await completion.Task
+                .AttachExternalCancellation(ct)
                 .TimeoutWithoutException(TimeSpan.FromMilliseconds(PurchaseTimeoutMs));
-
             if (isTimeout)
+                throw new TimeoutException("Unity IAP restore timed out.");
+            if (!restore.success)
+                throw new InvalidOperationException(
+                    string.IsNullOrEmpty(restore.error) ? "Unity IAP restore failed." : restore.error);
+
+            await FetchExistingPurchasesAsync(ct, PurchaseTimeoutMs);
+        }
+
+        public void Confirm(PurchaseTransaction transaction)
+        {
+            if (!IsInitialized || transaction == null) return;
+            if (_pendingOrders.TryGetValue(transaction.TransactionId, out var order))
+                _controller.ConfirmPurchase(order);
+        }
+
+        async UniTask FetchExistingPurchasesAsync(CancellationToken ct, int timeoutMs)
+        {
+            _purchasesTcs = new UniTaskCompletionSource<Orders>();
+            _controller.FetchPurchases();
+            var (isTimeout, _) = await _purchasesTcs.Task
+                .AttachExternalCancellation(ct)
+                .TimeoutWithoutException(TimeSpan.FromMilliseconds(timeoutMs));
+            if (isTimeout)
+                throw new TimeoutException("Unity IAP purchase fetch timed out.");
+        }
+
+        void OnProductsFetched(List<Product> products)
+            => _productsTcs?.TrySetResult(products);
+
+        void OnProductsFetchFailed(ProductFetchFailed failure)
+            => _productsTcs?.TrySetException(new InvalidOperationException(
+                $"Unity IAP product fetch failed: {failure?.FailureReason}"));
+
+        void OnPurchasesFetched(Orders orders)
+        {
+            if (orders?.PendingOrders != null)
             {
-                // 超时:清理 TCS 以免后续 SDK 回调触发残留副作用。
-                _purchaseTcs.TrySetCanceled();
-                _purchaseTcs = null;
-                return new PurchaseResult
-                { Success = false, ProductId = productId, FailureReason = "timeout" };
+                foreach (var order in orders.PendingOrders)
+                    HandlePendingOrder(order);
             }
 
-            return result;
+            // 非消耗型恢复后可能已是 ConfirmedOrder。交给同一幂等链路恢复 entitlement;
+            // 此类订单无需再次向商店 Confirm。
+            if (orders?.ConfirmedOrders != null)
+            {
+                foreach (var order in orders.ConfirmedOrders)
+                {
+                    var transaction = ToTransaction(order);
+                    if (transaction != null)
+                        PendingPurchaseReceived?.Invoke(transaction);
+                }
+            }
+
+            _purchasesTcs?.TrySetResult(orders);
         }
 
-        public UniTask RestoreAsync()
+        void OnPurchasesFetchFailed(PurchasesFetchFailureDescription failure)
+            => _purchasesTcs?.TrySetException(new InvalidOperationException(
+                $"Unity IAP purchase fetch failed: {failure?.Message}"));
+
+        void OnPurchasePending(PendingOrder order) => HandlePendingOrder(order);
+
+        void HandlePendingOrder(PendingOrder order)
         {
-            // iOS: AppleExtensions.RestoreTransactions;其它平台一般无需手动恢复。
-            var apple = _extensions?.GetExtension<IAppleExtensions>();
-            apple?.RestoreTransactions((_, __) => { });
-            return UniTask.CompletedTask;
+            var transaction = ToTransaction(order);
+            if (transaction == null) return;
+            _pendingOrders[transaction.TransactionId] = order;
+
+            if (_purchaseTcs != null && transaction.ProductId == _activeProductId)
+            {
+                _purchaseTcs.TrySetResult(new PurchaseResult
+                {
+                    Success = false,
+                    StoreApproved = true,
+                    ProductId = transaction.ProductId,
+                    Transaction = transaction,
+                });
+            }
+            else
+            {
+                PendingPurchaseReceived?.Invoke(transaction);
+            }
         }
 
-        // ---- IDetailedStoreListener 回调(主线程)----
-        public void OnInitialized(IStoreController controller, IExtensionProvider extensions)
+        void OnPurchaseFailed(FailedOrder order)
         {
-            _controller = controller;
-            _extensions = extensions;
-            _initTcs?.TrySetResult();
+            var productId = FirstProductId(order);
+            if (_purchaseTcs == null || productId != _activeProductId)
+                return;
+            var reason = order.FailureReason == PurchaseFailureReason.UserCancelled
+                ? "cancelled"
+                : order.FailureReason.ToString();
+            _purchaseTcs.TrySetResult(Failed(productId, reason));
         }
 
-        public void OnInitializeFailed(InitializationFailureReason error)
-            => _initTcs?.TrySetResult(); // 初始化失败不阻塞:IsInitialized 仍 false,后续购买返回 not_initialized。
-
-        public void OnInitializeFailed(InitializationFailureReason error, string message)
-            => _initTcs?.TrySetResult();
-
-        public PurchaseProcessingResult ProcessPurchase(PurchaseEventArgs args)
+        void OnPurchaseDeferred(DeferredOrder order)
         {
-            _purchaseTcs?.TrySetResult(new PurchaseResult
-            { Success = true, ProductId = args.purchasedProduct.definition.id });
-            return PurchaseProcessingResult.Complete;
+            var productId = FirstProductId(order);
+            if (_purchaseTcs != null && productId == _activeProductId)
+                _purchaseTcs.TrySetResult(Failed(productId, "deferred"));
         }
 
-        public void OnPurchaseFailed(Product product, PurchaseFailureDescription failureDescription)
+        void OnPurchaseConfirmed(Order order)
         {
-            var reason = failureDescription.reason == PurchaseFailureReason.UserCancelled
-                ? "cancelled" : failureDescription.reason.ToString();
-            _purchaseTcs?.TrySetResult(new PurchaseResult
-            { Success = false, ProductId = product.definition.id, FailureReason = reason });
+            var transactionId = order?.Info?.TransactionID;
+            if (!string.IsNullOrWhiteSpace(transactionId))
+                _pendingOrders.Remove(transactionId);
         }
 
-        public void OnPurchaseFailed(Product product, PurchaseFailureReason failureReason)
+        static PurchaseTransaction ToTransaction(Order order)
         {
-            var reason = failureReason == PurchaseFailureReason.UserCancelled
-                ? "cancelled" : failureReason.ToString();
-            _purchaseTcs?.TrySetResult(new PurchaseResult
-            { Success = false, ProductId = product.definition.id, FailureReason = reason });
+            var productId = FirstProductId(order);
+            if (string.IsNullOrWhiteSpace(productId) || order?.Info == null)
+                return null;
+            var transactionId = order.Info.TransactionID;
+            var receipt = order.Info.Receipt;
+            if (string.IsNullOrWhiteSpace(transactionId))
+                transactionId = CreateFallbackTransactionId(productId, receipt);
+            return new PurchaseTransaction
+            {
+                ProductId = productId,
+                TransactionId = transactionId,
+                Receipt = receipt,
+            };
+        }
+
+        static string FirstProductId(Order order)
+            => order?.CartOrdered?.Items()?.FirstOrDefault()?.Product?.definition?.id;
+
+        static PurchaseResult Failed(string productId, string reason)
+            => new PurchaseResult
+            {
+                Success = false,
+                StoreApproved = false,
+                ProductId = productId,
+                FailureReason = reason,
+            };
+
+        static UnityEngine.Purchasing.ProductType ToUnityProductType(ProductType type)
+            => type switch
+            {
+                ProductType.NonConsumable => UnityEngine.Purchasing.ProductType.NonConsumable,
+                ProductType.Subscription => UnityEngine.Purchasing.ProductType.Subscription,
+                _ => UnityEngine.Purchasing.ProductType.Consumable,
+            };
+
+        static string CreateFallbackTransactionId(string productId, string receipt)
+        {
+            var source = $"{productId}\n{receipt}";
+            using var sha = System.Security.Cryptography.SHA256.Create();
+            var hash = sha.ComputeHash(System.Text.Encoding.UTF8.GetBytes(source));
+            return "receipt-" + BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
+        }
+
+        void Subscribe()
+        {
+            _controller.OnStoreDisconnected += OnStoreDisconnected;
+            _controller.OnProductsFetched += OnProductsFetched;
+            _controller.OnProductsFetchFailed += OnProductsFetchFailed;
+            _controller.OnPurchasesFetched += OnPurchasesFetched;
+            _controller.OnPurchasesFetchFailed += OnPurchasesFetchFailed;
+            _controller.OnPurchasePending += OnPurchasePending;
+            _controller.OnPurchaseFailed += OnPurchaseFailed;
+            _controller.OnPurchaseDeferred += OnPurchaseDeferred;
+            _controller.OnPurchaseConfirmed += OnPurchaseConfirmed;
+        }
+
+        void Unsubscribe()
+        {
+            if (_controller == null) return;
+            _controller.OnStoreDisconnected -= OnStoreDisconnected;
+            _controller.OnProductsFetched -= OnProductsFetched;
+            _controller.OnProductsFetchFailed -= OnProductsFetchFailed;
+            _controller.OnPurchasesFetched -= OnPurchasesFetched;
+            _controller.OnPurchasesFetchFailed -= OnPurchasesFetchFailed;
+            _controller.OnPurchasePending -= OnPurchasePending;
+            _controller.OnPurchaseFailed -= OnPurchaseFailed;
+            _controller.OnPurchaseDeferred -= OnPurchaseDeferred;
+            _controller.OnPurchaseConfirmed -= OnPurchaseConfirmed;
+        }
+
+        void OnStoreDisconnected(StoreConnectionFailureDescription _) => _initialized = false;
+
+        void ThrowIfDisposed()
+        {
+            if (_disposed) throw new ObjectDisposedException(nameof(UnityIAPProvider));
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _initialized = false;
+            Unsubscribe();
+            _pendingOrders.Clear();
         }
     }
 }

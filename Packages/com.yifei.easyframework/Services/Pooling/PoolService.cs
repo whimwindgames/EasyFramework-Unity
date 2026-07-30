@@ -32,6 +32,7 @@ namespace EasyFramework.Services.Pooling
         readonly Dictionary<GameObject, float> _idleSince = new();
 
         GameObject _root;
+        bool _disposed;
         GameObject Root => _root != null ? _root : (_root = new GameObject("[Pools]"));
 
         /// <summary>生产构造:时间源默认 Time.realtimeSinceStartup。</summary>
@@ -56,6 +57,11 @@ namespace EasyFramework.Services.Pooling
         /// </summary>
         public void SetIdleTimeout(string key, float? idleTimeoutSeconds)
         {
+            ThrowIfDisposed();
+            ValidateKey(key);
+            if (idleTimeoutSeconds.HasValue &&
+                (float.IsNaN(idleTimeoutSeconds.Value) || float.IsInfinity(idleTimeoutSeconds.Value)))
+                throw new ArgumentOutOfRangeException(nameof(idleTimeoutSeconds));
             if (idleTimeoutSeconds.HasValue && idleTimeoutSeconds.Value > 0f)
             {
                 _idleTimeoutSeconds[key] = idleTimeoutSeconds.Value;
@@ -83,6 +89,9 @@ namespace EasyFramework.Services.Pooling
 
         public async UniTask PrewarmAsync(string key, int count)
         {
+            ThrowIfDisposed();
+            ValidateKey(key);
+            if (count < 0) throw new ArgumentOutOfRangeException(nameof(count));
             var prefab = await _assets.LoadAsync<GameObject>(key, AssetScope.Scene);
             var stack = GetStack(key);
             for (var i = 0; i < count; i++)
@@ -90,20 +99,26 @@ namespace EasyFramework.Services.Pooling
                 var go = Instantiate(prefab, key);
                 go.SetActive(false);
                 stack.Push(go);
+                if (_idleTimeoutSeconds.ContainsKey(key))
+                    _idleSince[go] = _now();
             }
         }
 
         public async UniTask<GameObject> SpawnAsync(string key, Vector3 position = default,
             Quaternion rotation = default, Transform parent = null)
         {
+            ThrowIfDisposed();
+            ValidateKey(key);
             var stack = GetStack(key);
-            GameObject go;
-            if (stack.Count > 0)
+            GameObject go = null;
+            while (stack.Count > 0 && go == null)
             {
                 go = stack.Pop();
                 _idleSince.Remove(go);
+                if (go == null)
+                    _poolablesCache.Remove(go);
             }
-            else
+            if (go == null)
             {
                 var prefab = await _assets.LoadAsync<GameObject>(key, AssetScope.Scene);
                 go = Instantiate(prefab, key);
@@ -114,21 +129,33 @@ namespace EasyFramework.Services.Pooling
             t.SetPositionAndRotation(position, rotation == default ? Quaternion.identity : rotation);
             go.SetActive(true);
             _active.Add(go);
-
-            foreach (var p in GetPoolables(go)) p.OnSpawn();
-            return go;
+            try
+            {
+                foreach (var p in GetPoolables(go)) p.OnSpawn();
+                return go;
+            }
+            catch
+            {
+                _active.Remove(go);
+                go.SetActive(false);
+                go.transform.SetParent(Root.transform, false);
+                stack.Push(go);
+                throw;
+            }
         }
 
         public void Despawn(GameObject instance)
         {
+            ThrowIfDisposed();
             if (instance == null) throw new ArgumentNullException(nameof(instance));
             var marker = instance.GetComponent<PooledMarker>();
             if (marker == null)
                 throw new InvalidOperationException("Instance was not spawned by this pool.");
-            if (!_active.Remove(instance))
+            if (!_active.Contains(instance))
                 throw new InvalidOperationException("Instance already despawned or not active.");
 
             foreach (var p in GetPoolables(instance)) p.OnDespawn();
+            _active.Remove(instance);
 
             // Remove cache entry so a stale destroyed-GameObject key cannot linger.
             // The next SpawnAsync/Despawn for this instance will re-populate via
@@ -168,14 +195,20 @@ namespace EasyFramework.Services.Pooling
         /// <summary>定时器周期回调:扫描 _idleSince,销毁超过各自 key 的 idleTimeoutSeconds 的实例。</summary>
         void ScanIdleTimeouts()
         {
+            if (_disposed) return;
             if (_idleSince.Count == 0) return;
 
             var now = _now();
             List<GameObject> toDestroy = null;
+            List<GameObject> destroyedExternally = null;
             foreach (var kv in _idleSince)
             {
                 var go = kv.Key;
-                if (go == null) continue; // 已被外部销毁,交给下面的清理兜底
+                if (go == null)
+                {
+                    (destroyedExternally ??= new List<GameObject>()).Add(go);
+                    continue;
+                }
                 var marker = go.GetComponent<PooledMarker>();
                 if (marker == null || !_idleTimeoutSeconds.TryGetValue(marker.Key, out var timeout))
                     continue;
@@ -183,6 +216,13 @@ namespace EasyFramework.Services.Pooling
 
                 (toDestroy ??= new List<GameObject>()).Add(go);
             }
+
+            if (destroyedExternally != null)
+                foreach (var go in destroyedExternally)
+                {
+                    _idleSince.Remove(go);
+                    _poolablesCache.Remove(go);
+                }
 
             if (toDestroy == null) return;
 
@@ -236,10 +276,24 @@ namespace EasyFramework.Services.Pooling
 
         public void Dispose()
         {
+            if (_disposed) return;
+            _disposed = true;
             _sceneUnloadSub?.Dispose();
             _timer?.Cancel(_scanTimerHandle);
             ClearAll();
             if (_root != null) DestroyHandler(_root);
+            _root = null;
+        }
+
+        static void ValidateKey(string key)
+        {
+            if (string.IsNullOrWhiteSpace(key))
+                throw new ArgumentException("Pool key is required.", nameof(key));
+        }
+
+        void ThrowIfDisposed()
+        {
+            if (_disposed) throw new ObjectDisposedException(nameof(PoolService));
         }
     }
 }

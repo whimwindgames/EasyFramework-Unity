@@ -14,7 +14,8 @@
 |---|---|
 | `EasyFramework.Template.asmdef` | `name` 改为 `<YourGame>`;删除/保留 references 按需 |
 | 所有 `.cs` 的 `namespace EasyFramework.Template` | 改为 `namespace <YourGame>` |
-| `TemplateGameLifetimeScope` | 类名改 `<YourGame>LifetimeScope` |
+| `TemplateRootLifetimeScope` | 类名改 `<YourGame>RootLifetimeScope` |
+| `TemplateGameLifetimeScope` | 类名改 `<YourGame>GameLifetimeScope` |
 | `TemplateGameFlow` | 类名改 `<YourGame>Flow`(及 `StateMachine<TemplateGameFlow>` 泛型参数) |
 | `TemplateSaveData` | 类名改 `<YourGame>SaveData`,字段换成你的存档数据 |
 | `CreateSaveProfile()` 里的 `HmacSalt` | 改成你游戏专属盐 |
@@ -22,8 +23,10 @@
 ## 三、接进框架(3 分钟)
 
 1. 打开 `Assets/Scenes/Boot.unity`。
-2. 在 `[EasyFramework]`(挂 `RootLifetimeScope`)下新建子 GameObject,挂你的 `<YourGame>LifetimeScope`(嵌套 LifetimeScope,自动成为 Root 的子作用域)。
-3. 若要替换存档:新建一个 `<YourGame>RootLifetimeScope` 继承 `RootLifetimeScope`,override `protected virtual SaveProfile GetSaveProfile()` 返回你游戏的 `SaveProfile`(参见 `TemplateGameLifetimeScope.CreateSaveProfile()` 示例)。然后把 Boot 场景 `[EasyFramework]` 节点上的 `RootLifetimeScope` 组件替换为你的 `<YourGame>RootLifetimeScope`。框架通过该 seam 决定 `G.Save.Data<T>()` 的载荷类型。注:`SaveProfile` 是普通 C# 类(非 ScriptableObject),无法通过 Inspector 字段传入。
+2. 在 `[EasyFramework]` 上挂复制改名后的 `<YourGame>RootLifetimeScope`;它已接好游戏存档,
+   也是广告、IAP 验签、统计、远程配置等根适配器的唯一配置位置。
+3. 在其下新建子 GameObject,挂 `<YourGame>GameLifetimeScope`(嵌套 LifetimeScope,
+   自动成为 Root 的子作用域),只注册游戏玩法与可选模块。不要在这里覆盖根服务 provider。
 4. Play。`BootCompletedEvent` 发布后,用入口点驱动 `<YourGame>Flow.ToMenu()` 进菜单。
 
 ## 四、各能力速查(写玩法时用 G 门面)
