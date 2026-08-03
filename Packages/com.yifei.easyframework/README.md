@@ -109,6 +109,18 @@ protected override void ConfigureFrameworkOptions(FrameworkOptions options)
 `options.UIRootFactoryFactory = resolver => new MyUIRootFactory()`；如果页面系统也完全自有，则使用
 `UIServiceFactory` 整体替换。两者不能同时设置。
 
+3D 场景中的 World Space UI 可直接使用同一 Profile。`ReferenceResolution` 决定根 RectTransform 的像素尺寸，
+`WorldSpaceScale` 决定像素到世界单位的换算（默认 `0.001`，即 1920 像素为 1.92 世界单位）：
+
+```csharp
+var profile = UIRootProfile.Landscape();
+profile.RenderMode = RenderMode.WorldSpace;
+profile.WorldCamera = worldUiCamera;
+profile.WorldSpaceScale = 0.001f;
+```
+
+需要把 Canvas 挂到角色、座舱或 3D 锚点时，使用自定义 `IUIRootFactory` 设置父节点与世界姿态。
+
 ---
 
 ## 二、G 门面速查表
@@ -124,7 +136,7 @@ protected override void ConfigureFrameworkOptions(FrameworkOptions options)
 | `G.Save` | `ISaveService` | `await LoadAsync()` / `Save()` / `Data<T>()` |
 | `G.Config` | `IConfigService` | `Get<T>(key, defaultValue)` / `Has(key)` / `await RefreshRemoteAsync(ct)` |
 | `G.Pool` | `IPoolService` | `await SpawnAsync(key, pos?, rot?, parent?)` / `Despawn(go)` / `await PrewarmAsync(key, count)` |
-| `G.UI` | `IUIService` | `await PushAsync<W>()` / `PopAsync()` / `await ShowPopupAsync<P, R>()` / `await ShowHudAsync<H>()` / `HideHudAsync<H>()` |
+| `G.UI` | `IUIService` | `await PushAsync<W>()` / `ShowPopupAsync<P, R>()` / `ShowHudAsync<H>()` / `ShowOverlayAsync<O>()` |
 | `G.Audio` | `IAudioService` | `await PlayBgmAsync(key, fade=0.5f)` / `StopBgm(fade=0.3f)` / `PlaySfx(key, vol=1f)` |
 | `G.Input` | `IInputService` | `MoveAxis`(摇杆 + WASD 合流)/ `IsPointerOverUI` |
 | `G.Camera` | `ICameraService` | 跟随 / 边界 / 震屏(Cinemachine 2D) |
@@ -174,10 +186,19 @@ OnSetup(args)  →  PlayEnter()  →  (显示)  →  PlayExit()  →  (销毁)
 - **Window** = 栈(`PushAsync` 盖在上面、`PopAsync` 回退;Push 时隐藏下层栈顶)。
 - **Popup** = 队列(同时只显示一个,带返回值;`await ShowPopupAsync<ConfirmPopup, bool>()` 拿用户选择)。
 - **HUD** = 按类型缓存常驻；多个不同类型 HUD 可以同时显示，使用 `HideHudAsync<T>()` 精确关闭，或无泛型版本一次关闭全部。
+- **Overlay** = 覆盖全部 UI 的全局状态层；同类型复用并置顶，不同类型按最近调用顺序叠放。使用 `HideOverlayAsync<T>()` 精确关闭，或无泛型版本全部关闭。适合 Loading、断线重连、登录遮罩和场景过场。
 
 四层绘制叠放自下而上:`Hud < Window < Popup < Overlay`(`UILayer`)。
 返回键(Android / Esc)路由到栈顶面板的 `OnBackRequested()`;`UIPopup` 默认拦截返回键等待显式选择。
 不上 MVVM —— 面板刷新由业务用 `IEventBus` 事件或直接调面板方法驱动。
+
+### 面板生命周期与跨程序集继承
+
+- 游戏程序集继承 `UIPanel` 时，使用 `protected override` 实现 `OnSetup`、`PlayEnter`、`PlayExit` 和 `OnBackRequested`；框架同一程序集内的测试或实现才使用 `protected internal override`。
+- 生命周期钩子只由 `IUIService` 调用。业务代码负责调用 Push/Show/Hide/Pop API，不直接调用钩子，也不自行销毁受服务管理的面板。
+- `OnSetup(args)` 每次 Show 都会调用；同类型 HUD/Overlay 被复用时也会收到新参数并重新执行 `PlayEnter()`。
+- Window、HUD 与 Overlay 在 `PlayExit()` 完成后销毁；Popup 在 `SetResult` 后退出并销毁。`SetResult` 仅供 `UIPopup<TResult>` 子类处理用户选择，重复调用只有第一次生效。
+- 所有 Window、HUD 与 Overlay 操作进入同一串行队列。调用方应传入所属页面或会话的 `CancellationToken`，不要用 `Forget()` 隐藏加载失败。
 
 默认 `UIRootProfile.Portrait()` 保持 `1080×1920`；横屏使用 `UIRootProfile.Landscape()`，默认
 `1920×1080` 且以高度为缩放基准。两者都依赖 CanvasScaler 连续适配不同宽高比，并由
@@ -257,7 +278,7 @@ public static void SetHighScore(int value) { /* ... */ }
 
 | 层 | 策略 |
 |---|---|
-| Core / 服务业务逻辑 | 209 项 EditMode 单测(状态机、对象池、存档迁移、事件、UI、HTTP 幂等重试、IAP Pending/补单等) |
+| Core / 服务业务逻辑 | 222 项 EditMode 单测(状态机、对象池、存档迁移、事件、UI、HTTP 幂等重试、IAP Pending/补单等) |
 | 运行时生命周期 | 3 项 PlayMode 冒烟(淡出遮罩、音频宿主释放、正式广告安全关闭) |
 | SDK 真机路径 | Fake 覆盖业务流转 + iOS/Android 商店沙盒与广告测试设备验收 |
 

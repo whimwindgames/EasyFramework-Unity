@@ -2,8 +2,8 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Unity-6000.3-black?logo=unity" alt="Unity 6000.3">
-  <img src="https://img.shields.io/badge/tests-215%20EditMode%20%2B%203%20PlayMode-2dd4bf" alt="218 core tests">
-  <img src="https://img.shields.io/badge/package-v0.3.0-blue" alt="Package version">
+  <img src="https://img.shields.io/badge/tests-222%20EditMode%20%2B%203%20PlayMode-2dd4bf" alt="225 core tests">
+  <img src="https://img.shields.io/badge/package-v0.3.1-blue" alt="Package version">
   <img src="https://img.shields.io/badge/platform-iOS%20%7C%20Android-388bfd" alt="iOS / Android">
   <img src="https://img.shields.io/badge/DI-VContainer-a371f7" alt="VContainer">
 </p>
@@ -18,7 +18,7 @@
 
 - **DI 内核 + 可选模块** — VContainer 管理装配与生命周期，资源、UI、输入、相机、对象池与商业化模块可按项目组合或替换；业务层仍可用 `G.UI` / `G.Audio` / `G.Save` 等门面快速开发。
 - **核心层(纯 C#,全单测)** — 异步状态机、对象池、定时器、强类型事件总线、优先级启动管线。
-- **服务层(11 模块)** — 资源(Addressables 按场景自动释放)、场景过渡、存档(HMAC + 版本迁移 + 原子写)、远程配置、横竖屏可配置的四层 UI 栈(弹窗带返回值、多 HUD)、音频交叉淡入、手势识别、相机、Juice 手感、本地化、震动。
+- **服务层(11 模块)** — 资源(Addressables 按场景自动释放)、场景过渡、存档(HMAC + 版本迁移 + 原子写)、远程配置、横竖屏可配置的四层 UI 栈(弹窗带返回值、多 HUD、多 Overlay)、音频交叉淡入、手势识别、相机、Juice 手感、本地化、震动。
 - **商业化核心 + 可选扩展** — 核心只保留广告频控、IAP Pending/journal/幂等补单与统计接口;AppLovin MAX 和 Unity IAP 分别由独立 Git/UPM 包按项目选择,两项都不装也能安全运行。
 - **开发体验** — 真机调试控制台、`[Cheat]` 特性作弊命令、FPS/内存角标、新游戏模板、完整示例游戏。
 

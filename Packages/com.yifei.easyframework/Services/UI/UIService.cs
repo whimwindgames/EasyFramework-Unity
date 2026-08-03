@@ -18,6 +18,7 @@ namespace EasyFramework.Services.UI
         readonly CancellationTokenSource _disposeCts = new();
         readonly List<UIPanel> _windowStack = new();
         readonly Dictionary<Type, UIPanel> _huds = new();
+        readonly Dictionary<Type, UIPanel> _overlays = new();
         readonly Queue<Func<UniTask>> _uiQueue = new();
         readonly Queue<Func<UniTask>> _popupQueue = new();
 
@@ -29,6 +30,7 @@ namespace EasyFramework.Services.UI
 
         public int WindowCount => _windowStack.Count;
         public int HudCount => _huds.Count;
+        public int OverlayCount => _overlays.Count;
 
         public UIService(IAssetService assets)
             : this(assets, new DefaultUIRootFactory(UIRootProfile.Portrait())) { }
@@ -261,23 +263,49 @@ namespace EasyFramework.Services.UI
 
         public UniTask<T> ShowHudAsync<T>(
             object args = null, CancellationToken ct = default) where T : UIPanel
+            => ShowCachedPanelAsync<T>(_huds, UILayer.Hud, false, args, ct);
+
+        public UniTask HideHudAsync<T>(CancellationToken ct = default) where T : UIPanel
+            => HideCachedPanelAsync(_huds, typeof(T), ct);
+
+        public UniTask HideHudAsync(CancellationToken ct = default)
+            => HideAllCachedPanelsAsync(_huds, ct);
+
+        public UniTask<T> ShowOverlayAsync<T>(
+            object args = null, CancellationToken ct = default) where T : UIPanel
+            => ShowCachedPanelAsync<T>(_overlays, UILayer.Overlay, true, args, ct);
+
+        public UniTask HideOverlayAsync<T>(CancellationToken ct = default) where T : UIPanel
+            => HideCachedPanelAsync(_overlays, typeof(T), ct);
+
+        public UniTask HideOverlayAsync(CancellationToken ct = default)
+            => HideAllCachedPanelsAsync(_overlays, ct);
+
+        UniTask<T> ShowCachedPanelAsync<T>(
+            Dictionary<Type, UIPanel> cache,
+            UILayer layer,
+            bool bringToFrontOnReuse,
+            object args,
+            CancellationToken ct) where T : UIPanel
             => EnqueueUiOp(async operationCt =>
             {
-                if (_huds.TryGetValue(typeof(T), out var existing) && existing != null)
+                if (cache.TryGetValue(typeof(T), out var existing) && existing != null)
                 {
                     existing.OnSetup(args);
                     existing.gameObject.SetActive(true);
+                    if (bringToFrontOnReuse)
+                        existing.transform.SetAsLastSibling();
                     await existing.PlayEnter();
                     operationCt.ThrowIfCancellationRequested();
                     return (T)existing;
                 }
 
-                var panel = await InstantiatePanelAsync<T>(UILayer.Hud, args, operationCt);
+                var panel = await InstantiatePanelAsync<T>(layer, args, operationCt);
                 try
                 {
                     await panel.PlayEnter();
                     operationCt.ThrowIfCancellationRequested();
-                    _huds[typeof(T)] = panel;
+                    cache[typeof(T)] = panel;
                     return panel;
                 }
                 catch
@@ -287,38 +315,54 @@ namespace EasyFramework.Services.UI
                 }
             }, ct);
 
-        public UniTask HideHudAsync<T>(CancellationToken ct = default) where T : UIPanel
-            => EnqueueUiOp(operationCt => HideHudCoreAsync(typeof(T), true, operationCt), ct);
+        UniTask HideCachedPanelAsync(
+            Dictionary<Type, UIPanel> cache, Type panelType, CancellationToken ct)
+            => EnqueueUiOp(
+                operationCt => HideCachedPanelCoreAsync(cache, panelType, true, operationCt), ct);
 
-        public UniTask HideHudAsync(CancellationToken ct = default)
-            => EnqueueUiOp(operationCt => HideAllHudsCoreAsync(true, operationCt), ct);
+        UniTask HideAllCachedPanelsAsync(
+            Dictionary<Type, UIPanel> cache, CancellationToken ct)
+            => EnqueueUiOp(
+                operationCt => HideAllCachedPanelsCoreAsync(cache, true, operationCt), ct);
 
-        async UniTask HideHudCoreAsync(Type hudType, bool animate, CancellationToken ct)
+        static async UniTask HideCachedPanelCoreAsync(
+            Dictionary<Type, UIPanel> cache,
+            Type panelType,
+            bool animate,
+            CancellationToken ct)
         {
-            if (!_huds.TryGetValue(hudType, out var hud)) return;
-            _huds.Remove(hudType);
+            if (!cache.TryGetValue(panelType, out var panel)) return;
+            cache.Remove(panelType);
             try
             {
-                if (animate) await hud.PlayExit();
+                if (animate) await panel.PlayExit();
                 ct.ThrowIfCancellationRequested();
             }
             finally
             {
-                if (hud != null) DestroyHandler(hud.gameObject);
+                if (panel != null) DestroyHandler(panel.gameObject);
             }
         }
 
-        async UniTask HideAllHudsCoreAsync(bool animate, CancellationToken ct)
+        static async UniTask HideAllCachedPanelsCoreAsync(
+            Dictionary<Type, UIPanel> cache, bool animate, CancellationToken ct)
         {
             Exception firstError = null;
-            var huds = new List<UIPanel>(_huds.Values);
-            _huds.Clear();
-            foreach (var hud in huds)
+            var panels = new List<UIPanel>(cache.Values);
+            cache.Clear();
+            panels.Sort((left, right) =>
+            {
+                if (left == null) return right == null ? 0 : 1;
+                if (right == null) return -1;
+                return right.transform.GetSiblingIndex().CompareTo(
+                    left.transform.GetSiblingIndex());
+            });
+            foreach (var panel in panels)
             {
                 try
                 {
                     ct.ThrowIfCancellationRequested();
-                    if (animate && hud != null) await hud.PlayExit();
+                    if (animate && panel != null) await panel.PlayExit();
                 }
                 catch (Exception e)
                 {
@@ -326,7 +370,7 @@ namespace EasyFramework.Services.UI
                 }
                 finally
                 {
-                    if (hud != null) DestroyHandler(hud.gameObject);
+                    if (panel != null) DestroyHandler(panel.gameObject);
                 }
             }
             if (firstError != null) throw firstError;
@@ -378,6 +422,10 @@ namespace EasyFramework.Services.UI
             foreach (var hud in _huds.Values)
                 if (hud != null) DestroyHandler(hud.gameObject);
             _huds.Clear();
+
+            foreach (var overlay in _overlays.Values)
+                if (overlay != null) DestroyHandler(overlay.gameObject);
+            _overlays.Clear();
             if (_activePopup != null)
             {
                 DestroyHandler(_activePopup.gameObject);

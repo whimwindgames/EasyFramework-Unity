@@ -4,9 +4,10 @@ using Cysharp.Threading.Tasks;
 namespace EasyFramework.Services.UI
 {
     /// <summary>
-    /// UI 服务门面。三种语义:
+    /// UI 服务门面。四种语义:
     /// Window = 栈(Push 盖在上面,Pop 回退);Popup = 队列(同时只显示一个,带返回值);
-    /// Hud = 按面板类型缓存,允许多个不同 HUD 同时存在。
+    /// Hud = 游戏内常驻信息层;Overlay = 覆盖全部 UI 的全局状态层。
+    /// Hud 与 Overlay 都按面板类型缓存,允许多个不同类型同时存在。
     /// </summary>
     public interface IUIService
     {
@@ -33,8 +34,21 @@ namespace EasyFramework.Services.UI
         /// <summary>隐藏并销毁全部 HUD。保留旧 API 的语义兼容。</summary>
         UniTask HideHudAsync(CancellationToken ct = default);
 
+        /// <summary>显示全局 Overlay。同类型复用并置顶，不同类型按最近调用顺序叠放。</summary>
+        UniTask<T> ShowOverlayAsync<T>(
+            object args = null, CancellationToken ct = default) where T : UIPanel;
+
+        /// <summary>隐藏并销毁指定类型 Overlay。</summary>
+        UniTask HideOverlayAsync<T>(CancellationToken ct = default) where T : UIPanel;
+
+        /// <summary>隐藏并销毁全部 Overlay。</summary>
+        UniTask HideOverlayAsync(CancellationToken ct = default);
+
         /// <summary>当前已显示的 HUD 数量。</summary>
         int HudCount { get; }
+
+        /// <summary>当前已显示的 Overlay 数量。</summary>
+        int OverlayCount { get; }
 
         /// <summary>当前 Window 栈深。</summary>
         int WindowCount { get; }
