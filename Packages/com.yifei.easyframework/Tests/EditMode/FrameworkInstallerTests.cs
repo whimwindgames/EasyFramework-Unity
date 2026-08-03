@@ -66,8 +66,13 @@ namespace EasyFramework.Tests
 
         IObjectResolver Build()
         {
+            return Build(MakeOptions());
+        }
+
+        static IObjectResolver Build(FrameworkOptions options)
+        {
             var builder = new ContainerBuilder();
-            EasyFramework.FrameworkInstaller.Install(builder, MakeOptions());
+            EasyFramework.FrameworkInstaller.Install(builder, options);
             return builder.Build();
         }
 
@@ -77,6 +82,52 @@ namespace EasyFramework.Tests
             var c = Build();
             Assert.NotNull(c.Resolve<IEventBus>());
             Assert.NotNull(c.Resolve<ITimerService>());
+        }
+
+        [Test]
+        public void CoreOnly_DoesNotRegisterOptionalServices_AndGRemainsUsable()
+        {
+            var options = MakeOptions();
+            options.Features = FrameworkFeatureSets.CoreOnly;
+            var c = Build(options);
+
+            Assert.NotNull(c.Resolve<IEventBus>());
+            Assert.NotNull(c.Resolve<ITimerService>());
+            Assert.IsFalse(c.TryResolve<IUIService>(out _));
+            Assert.IsFalse(c.TryResolve<IAssetService>(out _));
+            Assert.IsFalse(c.TryResolve<IAdsService>(out _));
+
+            EasyFramework.G.Initialize(c);
+            Assert.IsTrue(EasyFramework.G.IsInitialized);
+            Assert.IsNull(EasyFramework.G.UI);
+            Assert.IsNull(EasyFramework.G.Asset);
+            Assert.IsNull(EasyFramework.G.Ads);
+        }
+
+        [Test]
+        public void Install_RejectsEnabledModuleWithMissingDependency()
+        {
+            var options = MakeOptions();
+            options.Features = FrameworkFeatures.Core | FrameworkFeatures.UI;
+            var builder = new ContainerBuilder();
+
+            var error = Assert.Throws<System.InvalidOperationException>(() =>
+                EasyFramework.FrameworkInstaller.Install(builder, options));
+            StringAssert.Contains("Assets", error.Message);
+        }
+
+        [Test]
+        public void Install_UsesExternalInputWithoutPresentationModules()
+        {
+            var input = new StubInputService();
+            var options = MakeOptions();
+            options.Features = FrameworkFeatures.Core | FrameworkFeatures.Input;
+            options.InputServiceFactory = _ => input;
+
+            var c = Build(options);
+            Assert.AreSame(input, c.Resolve<IInputService>());
+            Assert.IsFalse(c.TryResolve<IAssetService>(out _));
+            Assert.IsFalse(c.TryResolve<ICameraService>(out _));
         }
 
         [Test]
@@ -229,6 +280,12 @@ namespace EasyFramework.Tests
             var c = Build();
             EasyFramework.G.Initialize(c);
             Assert.AreSame(c.Resolve<IContentUpdateService>(), EasyFramework.G.ContentUpdate);
+        }
+
+        sealed class StubInputService : IInputService
+        {
+            public Vector2 MoveAxis => Vector2.zero;
+            public bool IsPointerOverUI => false;
         }
     }
 }

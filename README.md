@@ -2,23 +2,23 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Unity-6000.3-black?logo=unity" alt="Unity 6000.3">
-  <img src="https://img.shields.io/badge/tests-209%20EditMode%20%2B%203%20PlayMode-2dd4bf" alt="212 core tests">
-  <img src="https://img.shields.io/badge/openupm-v0.2.1-blue" alt="OpenUPM">
+  <img src="https://img.shields.io/badge/tests-215%20EditMode%20%2B%203%20PlayMode-2dd4bf" alt="218 core tests">
+  <img src="https://img.shields.io/badge/package-v0.3.0-blue" alt="Package version">
   <img src="https://img.shields.io/badge/platform-iOS%20%7C%20Android-388bfd" alt="iOS / Android">
   <img src="https://img.shields.io/badge/DI-VContainer-a371f7" alt="VContainer">
 </p>
 
 # EasyFramework
 
-开箱即用的 **Unity 2D 移动游戏复用底座**。用同一套框架快速做多个小游戏:做完一个,下一个直接复用。以 VContainer 依赖注入为内核,服务层全部接口化,商业化 SDK 可整体替换而不改业务代码。
+面向 **Unity 2D、2.5D 与 3D 游戏**的模块化复用底座。新项目可以开箱即用，已有项目也可以只接入依赖管理与需要的服务，保留自己的 UI、输入、相机和对象池。以 VContainer 依赖注入为内核，服务层全部接口化。
 
 > 目标:**从空项目到能跑的新游戏 < 10 分钟**(复制模板即跑)。
 
 ## 特性
 
-- **DI 内核 + 静态门面** — VContainer 管理装配与生命周期,业务层用 `G.UI` / `G.Audio` / `G.Save` 等门面快速开发,核心逻辑仍可构造注入、可单测。
+- **DI 内核 + 可选模块** — VContainer 管理装配与生命周期，资源、UI、输入、相机、对象池与商业化模块可按项目组合或替换；业务层仍可用 `G.UI` / `G.Audio` / `G.Save` 等门面快速开发。
 - **核心层(纯 C#,全单测)** — 异步状态机、对象池、定时器、强类型事件总线、优先级启动管线。
-- **服务层(11 模块)** — 资源(Addressables 按场景自动释放)、场景过渡、存档(HMAC + 版本迁移 + 原子写)、远程配置、四层 UI 栈(弹窗带返回值)、音频交叉淡入、手势识别、相机、Juice 手感、本地化、震动。
+- **服务层(11 模块)** — 资源(Addressables 按场景自动释放)、场景过渡、存档(HMAC + 版本迁移 + 原子写)、远程配置、横竖屏可配置的四层 UI 栈(弹窗带返回值、多 HUD)、音频交叉淡入、手势识别、相机、Juice 手感、本地化、震动。
 - **商业化核心 + 可选扩展** — 核心只保留广告频控、IAP Pending/journal/幂等补单与统计接口;AppLovin MAX 和 Unity IAP 分别由独立 Git/UPM 包按项目选择,两项都不装也能安全运行。
 - **开发体验** — 真机调试控制台、`[Cheat]` 特性作弊命令、FPS/内存角标、新游戏模板、完整示例游戏。
 
@@ -57,7 +57,7 @@ CLI 会自动配置 scoped registry、所有依赖 scope 和包本身。
 然后在 Package Manager → **Add package by name** 输入 `com.yifei.easyframework`;或在收录前直接用 git URL(依赖仍由上面的 registry 解析):
 
 ```
-"com.yifei.easyframework": "https://github.com/whimwindgames/EasyFramework-Unity.git?path=Packages/com.yifei.easyframework#v0.2.1"
+"com.yifei.easyframework": "https://github.com/whimwindgames/EasyFramework-Unity.git?path=Packages/com.yifei.easyframework#main"
 ```
 
 安装后,在 Package Manager 里选中 EasyFramework → **Samples** 标签导入 **TapRush** 即可上手。

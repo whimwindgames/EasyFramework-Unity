@@ -5,7 +5,8 @@ namespace EasyFramework.Services.UI
 {
     /// <summary>
     /// UI 服务门面。三种语义:
-    /// Window = 栈(Push 盖在上面,Pop 回退);Popup = 队列(同时只显示一个,带返回值);Hud = 单实例常驻。
+    /// Window = 栈(Push 盖在上面,Pop 回退);Popup = 队列(同时只显示一个,带返回值);
+    /// Hud = 按面板类型缓存,允许多个不同 HUD 同时存在。
     /// </summary>
     public interface IUIService
     {
@@ -22,12 +23,18 @@ namespace EasyFramework.Services.UI
         UniTask<TResult> ShowPopupAsync<TPopup, TResult>(
             object args = null, CancellationToken ct = default) where TPopup : UIPopup<TResult>;
 
-        /// <summary>显示 HUD(单实例);已有 HUD 时先隐藏旧的。</summary>
+        /// <summary>显示 HUD。同类型复用，不同类型可以同时存在。</summary>
         UniTask<T> ShowHudAsync<T>(
             object args = null, CancellationToken ct = default) where T : UIPanel;
 
-        /// <summary>隐藏当前 HUD。</summary>
+        /// <summary>隐藏并销毁指定类型 HUD。</summary>
+        UniTask HideHudAsync<T>(CancellationToken ct = default) where T : UIPanel;
+
+        /// <summary>隐藏并销毁全部 HUD。保留旧 API 的语义兼容。</summary>
         UniTask HideHudAsync(CancellationToken ct = default);
+
+        /// <summary>当前已显示的 HUD 数量。</summary>
+        int HudCount { get; }
 
         /// <summary>当前 Window 栈深。</summary>
         int WindowCount { get; }

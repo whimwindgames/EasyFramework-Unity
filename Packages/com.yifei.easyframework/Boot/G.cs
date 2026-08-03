@@ -58,27 +58,27 @@ namespace EasyFramework
             _owner = resolver;
             Events = resolver.Resolve<IEventBus>();
             Timer = resolver.Resolve<ITimerService>();
-            Asset = resolver.Resolve<IAssetService>();
-            Scene = resolver.Resolve<ISceneService>();
-            Save = resolver.Resolve<ISaveService>();
-            Config = resolver.Resolve<IConfigService>();
-            Http = resolver.Resolve<IHttpService>();
-            ContentUpdate = resolver.Resolve<IContentUpdateService>();
-            Pool = resolver.Resolve<IPoolService>();
+            Asset = resolver.ResolveOrDefault<IAssetService>();
+            Scene = resolver.ResolveOrDefault<ISceneService>();
+            Save = resolver.ResolveOrDefault<ISaveService>();
+            Config = resolver.ResolveOrDefault<IConfigService>();
+            Http = resolver.ResolveOrDefault<IHttpService>();
+            ContentUpdate = resolver.ResolveOrDefault<IContentUpdateService>();
+            Pool = resolver.ResolveOrDefault<IPoolService>();
 
-            UI = resolver.Resolve<IUIService>();
+            UI = resolver.ResolveOrDefault<IUIService>();
 
-            Audio = resolver.Resolve<IAudioService>();
-            Input = resolver.Resolve<IInputService>();
-            Camera = resolver.Resolve<ICameraService>();
-            Juice = resolver.Resolve<IJuiceService>();
-            Loc = resolver.Resolve<ILocalizationService>();
-            Haptics = resolver.Resolve<IHapticsService>();
+            Audio = resolver.ResolveOrDefault<IAudioService>();
+            Input = resolver.ResolveOrDefault<IInputService>();
+            Camera = resolver.ResolveOrDefault<ICameraService>();
+            Juice = resolver.ResolveOrDefault<IJuiceService>();
+            Loc = resolver.ResolveOrDefault<ILocalizationService>();
+            Haptics = resolver.ResolveOrDefault<IHapticsService>();
 
             // Phase 4 商业化层
-            Ads = resolver.Resolve<IAdsService>();
-            IAP = resolver.Resolve<IIAPService>();
-            Analytics = resolver.Resolve<IAnalyticsService>();
+            Ads = resolver.ResolveOrDefault<IAdsService>();
+            IAP = resolver.ResolveOrDefault<IIAPService>();
+            Analytics = resolver.ResolveOrDefault<IAnalyticsService>();
 
             // 填充 Services 层本地化运行时访问点,供 LocalizedText 读取(避免 Services → Boot 循环依赖)。
             LocalizationRuntime.Initialize(Loc, Events);

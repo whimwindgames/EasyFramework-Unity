@@ -1,6 +1,7 @@
 # EasyFramework 使用文档
 
-Unity 2D 小游戏复用底座。DI 内核(VContainer)+ 静态门面(`G`)。从空项目到能跑的新游戏 < 10 分钟。
+Unity 2D、2.5D 与 3D 游戏复用底座。DI 内核(VContainer)+ 可选服务模块 + 静态门面(`G`)。
+新项目可以开箱即用，已有项目可以只接入依赖管理与需要的服务，不必替换现有相机、输入或对象池。
 
 - 要求 Unity 6000.0+(URP + 新 Input System)
 - 设计文档与完整仓库:https://github.com/whimwindgames/EasyFramework-Unity
@@ -65,7 +66,7 @@ EasyFramework.DevTools = [Cheat] 作弊 + FPS/内存角标 + 调试控制台
 **启动管线**(`RootLifetimeScope`,挂在 Boot 场景的常驻 `DontDestroyOnLoad` 节点上):
 
 ```
-FrameworkInstaller.Install(builder, FrameworkOptions)   注册全部服务(接口 + 实现)
+FrameworkInstaller.Install(builder, FrameworkOptions)   只注册启用的服务(接口 + 实现)
         │
         ▼
 GameBootstrap   按 IBootTask.Priority 升序异步初始化各服务
@@ -77,7 +78,36 @@ G.Initialize(resolver)   把已解析服务绑定到 G 门面
 发布 BootCompletedEvent   业务层据此进入主菜单
 ```
 
-> 商业化 SDK / 远程配置等非关键初始化失败只降级该服务、不崩游戏(设计文档 §3.1 / §8)。
+> 商业化 SDK / 远程配置等非关键初始化失败只降级该服务、不崩游戏。关闭的模块不会构造、启动，
+> 对应 `G.Xxx` 为 `null`；`G.Events` 与 `G.Timer` 始终可用。
+
+### 已有项目的模块化接入
+
+`FrameworkOptions.Features` 默认是 `FrameworkFeatures.All`，保持旧版开箱即用行为。已有大型项目建议从
+`FrameworkFeatureSets.ExistingProject` 起步，再逐个加入需要的模块：
+
+```csharp
+protected override void ConfigureFrameworkOptions(FrameworkOptions options)
+{
+    options.Features = FrameworkFeatureSets.ExistingProject |
+                       FrameworkFeatures.UI |
+                       FrameworkFeatures.Input |
+                       FrameworkFeatures.Camera |
+                       FrameworkFeatures.Pooling;
+
+    // 横屏不是特殊版本，只是 UI Root 的一种配置。
+    options.UIRootProfile = UIRootProfile.Landscape(1920f, 1080f);
+
+    // 项目已有特殊系统时，在根容器构建前替换；未启用的模块无需提供。
+    options.InputServiceFactory = resolver => new MyInputService();
+    options.CameraServiceFactory = resolver => new MyCameraService();
+    options.PoolServiceFactory = resolver => new MyPoolService();
+}
+```
+
+如果项目需要 URP Camera Stack、多相机、已有 Canvas 或特殊安全区层级，提供
+`options.UIRootFactoryFactory = resolver => new MyUIRootFactory()`；如果页面系统也完全自有，则使用
+`UIServiceFactory` 整体替换。两者不能同时设置。
 
 ---
 
@@ -94,7 +124,7 @@ G.Initialize(resolver)   把已解析服务绑定到 G 门面
 | `G.Save` | `ISaveService` | `await LoadAsync()` / `Save()` / `Data<T>()` |
 | `G.Config` | `IConfigService` | `Get<T>(key, defaultValue)` / `Has(key)` / `await RefreshRemoteAsync(ct)` |
 | `G.Pool` | `IPoolService` | `await SpawnAsync(key, pos?, rot?, parent?)` / `Despawn(go)` / `await PrewarmAsync(key, count)` |
-| `G.UI` | `IUIService` | `await PushAsync<W>()` / `PopAsync()` / `PopAllAsync()` / `await ShowPopupAsync<P, R>()` / `await ShowHudAsync<H>()` / `HideHudAsync()` |
+| `G.UI` | `IUIService` | `await PushAsync<W>()` / `PopAsync()` / `await ShowPopupAsync<P, R>()` / `await ShowHudAsync<H>()` / `HideHudAsync<H>()` |
 | `G.Audio` | `IAudioService` | `await PlayBgmAsync(key, fade=0.5f)` / `StopBgm(fade=0.3f)` / `PlaySfx(key, vol=1f)` |
 | `G.Input` | `IInputService` | `MoveAxis`(摇杆 + WASD 合流)/ `IsPointerOverUI` |
 | `G.Camera` | `ICameraService` | 跟随 / 边界 / 震屏(Cinemachine 2D) |
@@ -143,11 +173,15 @@ OnSetup(args)  →  PlayEnter()  →  (显示)  →  PlayExit()  →  (销毁)
 
 - **Window** = 栈(`PushAsync` 盖在上面、`PopAsync` 回退;Push 时隐藏下层栈顶)。
 - **Popup** = 队列(同时只显示一个,带返回值;`await ShowPopupAsync<ConfirmPopup, bool>()` 拿用户选择)。
-- **HUD** = 单实例常驻(`ShowHudAsync` / `HideHudAsync`)。
+- **HUD** = 按类型缓存常驻；多个不同类型 HUD 可以同时显示，使用 `HideHudAsync<T>()` 精确关闭，或无泛型版本一次关闭全部。
 
 四层绘制叠放自下而上:`Hud < Window < Popup < Overlay`(`UILayer`)。
 返回键(Android / Esc)路由到栈顶面板的 `OnBackRequested()`;`UIPopup` 默认拦截返回键等待显式选择。
 不上 MVVM —— 面板刷新由业务用 `IEventBus` 事件或直接调面板方法驱动。
+
+默认 `UIRootProfile.Portrait()` 保持 `1080×1920`；横屏使用 `UIRootProfile.Landscape()`，默认
+`1920×1080` 且以高度为缩放基准。两者都依赖 CanvasScaler 连续适配不同宽高比，并由
+`SafeAreaFitter` 在分辨率或设备方向变化时重新计算安全区。框架不会强制设置设备方向。
 
 ---
 

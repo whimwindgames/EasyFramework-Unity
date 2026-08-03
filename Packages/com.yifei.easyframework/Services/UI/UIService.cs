@@ -14,27 +14,39 @@ namespace EasyFramework.Services.UI
         internal static Action<GameObject> DestroyHandler = UnityEngine.Object.Destroy;
 
         readonly IAssetService _assets;
+        readonly IUIRootFactory _rootFactory;
         readonly CancellationTokenSource _disposeCts = new();
         readonly List<UIPanel> _windowStack = new();
+        readonly Dictionary<Type, UIPanel> _huds = new();
         readonly Queue<Func<UniTask>> _uiQueue = new();
         readonly Queue<Func<UniTask>> _popupQueue = new();
 
         UIRootHandle _root;
-        UIPanel _hud;
         UIPanel _activePopup;
         bool _pumpingUi;
         bool _pumpingPopups;
         bool _disposed;
 
         public int WindowCount => _windowStack.Count;
+        public int HudCount => _huds.Count;
 
         public UIService(IAssetService assets)
-            => _assets = assets ?? throw new ArgumentNullException(nameof(assets));
+            : this(assets, new DefaultUIRootFactory(UIRootProfile.Portrait())) { }
+
+        public UIService(IAssetService assets, IUIRootFactory rootFactory)
+        {
+            _assets = assets ?? throw new ArgumentNullException(nameof(assets));
+            _rootFactory = rootFactory ?? throw new ArgumentNullException(nameof(rootFactory));
+        }
 
         UIRootHandle EnsureRoot()
         {
             ThrowIfDisposed();
-            return _root ??= UIRootBuilder.Build();
+            if (_root != null) return _root;
+            _root = _rootFactory.Create()
+                ?? throw new InvalidOperationException("UI root factory returned null.");
+            _root.Validate();
+            return _root;
         }
 
         async UniTask<T> InstantiatePanelAsync<T>(
@@ -251,13 +263,21 @@ namespace EasyFramework.Services.UI
             object args = null, CancellationToken ct = default) where T : UIPanel
             => EnqueueUiOp(async operationCt =>
             {
-                await HideHudCoreAsync(true);
+                if (_huds.TryGetValue(typeof(T), out var existing) && existing != null)
+                {
+                    existing.OnSetup(args);
+                    existing.gameObject.SetActive(true);
+                    await existing.PlayEnter();
+                    operationCt.ThrowIfCancellationRequested();
+                    return (T)existing;
+                }
+
                 var panel = await InstantiatePanelAsync<T>(UILayer.Hud, args, operationCt);
                 try
                 {
                     await panel.PlayEnter();
                     operationCt.ThrowIfCancellationRequested();
-                    _hud = panel;
+                    _huds[typeof(T)] = panel;
                     return panel;
                 }
                 catch
@@ -267,26 +287,49 @@ namespace EasyFramework.Services.UI
                 }
             }, ct);
 
-        public UniTask HideHudAsync(CancellationToken ct = default)
-            => EnqueueUiOp(async operationCt =>
-            {
-                await HideHudCoreAsync(true);
-                operationCt.ThrowIfCancellationRequested();
-            }, ct);
+        public UniTask HideHudAsync<T>(CancellationToken ct = default) where T : UIPanel
+            => EnqueueUiOp(operationCt => HideHudCoreAsync(typeof(T), true, operationCt), ct);
 
-        async UniTask HideHudCoreAsync(bool animate)
+        public UniTask HideHudAsync(CancellationToken ct = default)
+            => EnqueueUiOp(operationCt => HideAllHudsCoreAsync(true, operationCt), ct);
+
+        async UniTask HideHudCoreAsync(Type hudType, bool animate, CancellationToken ct)
         {
-            if (_hud == null) return;
-            var hud = _hud;
-            _hud = null;
+            if (!_huds.TryGetValue(hudType, out var hud)) return;
+            _huds.Remove(hudType);
             try
             {
                 if (animate) await hud.PlayExit();
+                ct.ThrowIfCancellationRequested();
             }
             finally
             {
                 if (hud != null) DestroyHandler(hud.gameObject);
             }
+        }
+
+        async UniTask HideAllHudsCoreAsync(bool animate, CancellationToken ct)
+        {
+            Exception firstError = null;
+            var huds = new List<UIPanel>(_huds.Values);
+            _huds.Clear();
+            foreach (var hud in huds)
+            {
+                try
+                {
+                    ct.ThrowIfCancellationRequested();
+                    if (animate && hud != null) await hud.PlayExit();
+                }
+                catch (Exception e)
+                {
+                    firstError ??= e;
+                }
+                finally
+                {
+                    if (hud != null) DestroyHandler(hud.gameObject);
+                }
+            }
+            if (firstError != null) throw firstError;
         }
 
         public void Tick()
@@ -332,11 +375,9 @@ namespace EasyFramework.Services.UI
                 if (panel != null) DestroyHandler(panel.gameObject);
             _windowStack.Clear();
 
-            if (_hud != null)
-            {
-                DestroyHandler(_hud.gameObject);
-                _hud = null;
-            }
+            foreach (var hud in _huds.Values)
+                if (hud != null) DestroyHandler(hud.gameObject);
+            _huds.Clear();
             if (_activePopup != null)
             {
                 DestroyHandler(_activePopup.gameObject);
@@ -344,9 +385,9 @@ namespace EasyFramework.Services.UI
             }
             if (_root != null)
             {
-                if (_root.EventSystemObject != null)
+                if (_root.OwnsEventSystem && _root.EventSystemObject != null)
                     DestroyHandler(_root.EventSystemObject);
-                if (_root.Root != null)
+                if (_root.OwnsRoot && _root.Root != null)
                     DestroyHandler(_root.Root);
                 _root = null;
             }

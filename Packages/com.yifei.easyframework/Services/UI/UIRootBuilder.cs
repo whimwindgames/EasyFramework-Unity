@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem.UI;
@@ -6,41 +5,52 @@ using UnityEngine.UI;
 
 namespace EasyFramework.Services.UI
 {
-    /// <summary>持有 UIRoot 各层根 Transform 的句柄。</summary>
-    internal sealed class UIRootHandle
-    {
-        public GameObject Root;
-        public Canvas Canvas;
-        public readonly Dictionary<UILayer, RectTransform> Layers = new();
-        public GameObject EventSystemObject; // 仅当本服务补建时非空
-
-        public RectTransform Layer(UILayer layer) => Layers[layer];
-    }
-
-    /// <summary>程序化构建 DontDestroyOnLoad 的 UIRoot(Canvas + 四层根 + 按需 EventSystem)。</summary>
+    /// <summary>按配置构建 UIRoot(Canvas + 四层根 + 按需 EventSystem)。</summary>
     internal static class UIRootBuilder
     {
         /// <summary>EditMode 测试可替换为 no-op;运行时为 Object.DontDestroyOnLoad
         /// (DontDestroyOnLoad 仅在 Play 模式合法,EditMode 调用会抛异常)。</summary>
         internal static System.Action<GameObject> DontDestroyHandler = Object.DontDestroyOnLoad;
 
-        public static UIRootHandle Build()
+        public static UIRootHandle Build(UIRootProfile profile)
         {
+            if (profile == null) throw new System.ArgumentNullException(nameof(profile));
+            profile.Validate();
+
+            Camera worldCamera = null;
+            if (profile.RenderMode != RenderMode.ScreenSpaceOverlay)
+            {
+                worldCamera = profile.WorldCamera != null
+                    ? profile.WorldCamera
+                    : profile.UseMainCameraWhenWorldCameraMissing ? Camera.main : null;
+                if (profile.RenderMode == RenderMode.ScreenSpaceCamera && worldCamera == null)
+                    throw new System.InvalidOperationException(
+                        "ScreenSpaceCamera UI requires UIRootProfile.WorldCamera, Camera.main, " +
+                        "or a custom IUIRootFactory.");
+            }
+
             var handle = new UIRootHandle();
 
             var root = new GameObject("[UIRoot]");
-            DontDestroyHandler(root);
+            if (profile.DontDestroyOnLoad)
+                DontDestroyHandler(root);
             handle.Root = root;
 
             var canvas = root.AddComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            canvas.renderMode = profile.RenderMode;
+            canvas.planeDistance = profile.PlaneDistance;
+            canvas.sortingLayerName = profile.SortingLayerName;
+            canvas.sortingOrder = profile.SortingOrder;
+            if (profile.RenderMode != RenderMode.ScreenSpaceOverlay)
+                canvas.worldCamera = worldCamera;
             handle.Canvas = canvas;
 
             var scaler = root.AddComponent<CanvasScaler>();
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1080f, 1920f);
-            scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
-            scaler.matchWidthOrHeight = 0.5f;
+            scaler.uiScaleMode = profile.ScaleMode;
+            scaler.referenceResolution = profile.ReferenceResolution;
+            scaler.screenMatchMode = profile.ScreenMatchMode;
+            scaler.matchWidthOrHeight = Mathf.Clamp01(profile.MatchWidthOrHeight);
+            scaler.referencePixelsPerUnit = profile.ReferencePixelsPerUnit;
 
             root.AddComponent<GraphicRaycaster>();
 
@@ -53,28 +63,51 @@ namespace EasyFramework.Services.UI
                 rt.SetParent(root.transform, false);
                 Stretch(rt);
                 rt.SetAsLastSibling(); // 保持创建顺序即叠放顺序
-                layerGo.AddComponent<SafeAreaFitter>();
+                if (profile.ApplySafeArea)
+                    layerGo.AddComponent<SafeAreaFitter>();
+                if (profile.UseIndependentLayerSorting)
+                {
+                    var layerCanvas = layerGo.AddComponent<Canvas>();
+                    layerCanvas.overrideSorting = true;
+                    layerCanvas.sortingLayerName = profile.SortingLayerName;
+                    layerCanvas.sortingOrder = profile.SortingOrder + (int)layer * profile.LayerSortingStep;
+                    layerGo.AddComponent<GraphicRaycaster>();
+                }
                 handle.Layers[layer] = rt;
             }
 
-            EnsureEventSystem(handle);
+            if (profile.EnsureEventSystem)
+                EnsureEventSystem(handle, profile.DisableNavigationEvents);
+            handle.Validate();
             return handle;
         }
 
-        static void EnsureEventSystem(UIRootHandle handle)
+        static void EnsureEventSystem(UIRootHandle handle, bool disableNavigationEvents)
         {
-            if (EventSystem.current != null) return;
+            if (EventSystem.current != null)
+            {
+                if (disableNavigationEvents)
+                    EventSystem.current.sendNavigationEvents = false;
+                return;
+            }
 #if UNITY_2023_1_OR_NEWER
             var existing = Object.FindFirstObjectByType<EventSystem>();
 #else
             var existing = Object.FindObjectOfType<EventSystem>();
 #endif
-            if (existing != null) return;
+            if (existing != null)
+            {
+                if (disableNavigationEvents)
+                    existing.sendNavigationEvents = false;
+                return;
+            }
 
             var es = new GameObject("[EventSystem]");
-            DontDestroyHandler(es);
-            es.AddComponent<EventSystem>();
+            var eventSystem = es.AddComponent<EventSystem>();
+            eventSystem.sendNavigationEvents = !disableNavigationEvents;
             es.AddComponent<InputSystemUIInputModule>();
+            if (handle.Root != null && handle.Root.scene.IsValid())
+                es.transform.SetParent(handle.Root.transform, false);
             handle.EventSystemObject = es;
         }
 

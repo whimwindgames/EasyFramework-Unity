@@ -7,6 +7,7 @@ using EasyFramework.Services.Configs;
 using EasyFramework.Services.Inputs;
 using EasyFramework.Services.Localization;
 using EasyFramework.Services.Saves;
+using EasyFramework.Services.UI;
 using UnityEngine;
 using VContainer;
 using VContainer.Unity;
@@ -16,6 +17,9 @@ namespace EasyFramework
     /// <summary>框架组合根。挂在 Boot 场景的常驻 GameObject 上。</summary>
     public class RootLifetimeScope : LifetimeScope
     {
+        [Header("启用模块")]
+        [SerializeField] FrameworkFeatures _features = FrameworkFeatures.All;
+
         [Header("本地配置表(可空)")]
         [SerializeField] List<ConfigTable> _configTables = new();
 
@@ -31,10 +35,14 @@ namespace EasyFramework
         [Header("内购商品目录(可空)")]
         [SerializeField] ProductCatalog _productCatalog;
 
+        [Header("UI Root（横竖屏/渲染模式/缩放）")]
+        [SerializeField] UIRootProfile _uiRootProfile = new();
+
         protected override void Configure(IContainerBuilder builder)
         {
             var options = new FrameworkOptions
             {
+                Features = _features,
                 SaveDirectory = Application.persistentDataPath,
                 ConfigTables = _configTables,
                 SaveProfile = GetSaveProfile(),
@@ -42,6 +50,7 @@ namespace EasyFramework
                 LocalizationTables = _localizationTables,
                 DefaultLocale = _defaultLocale,
                 ProductCatalog = _productCatalog,
+                UIRootProfile = _uiRootProfile,
             };
             ConfigureFrameworkOptions(options);
 
@@ -51,16 +60,23 @@ namespace EasyFramework
             builder.UseEntryPoints(ep =>
             {
                 ep.Add<TimerTicker>();
-                ep.Add<AudioTicker>();
-                ep.Add<InputTicker>();
+                if (options.IsEnabled(FrameworkFeatures.UI) && options.UIServiceFactory == null)
+                    ep.Add<UITicker>();
+                if (options.IsEnabled(FrameworkFeatures.Audio))
+                    ep.Add<AudioTicker>();
+                if (options.IsEnabled(FrameworkFeatures.Input) && options.InputServiceFactory == null)
+                    ep.Add<InputTicker>();
             });
 
-            // SaveOnPauseListener 挂到本组合根 GameObject,build 后绑定 ISaveService。
-            var pauseListener = gameObject.AddComponent<SaveOnPauseListener>();
+            // SaveOnPauseListener 仅在启用存档模块时创建。
+            var pauseListener = options.IsEnabled(FrameworkFeatures.Save)
+                ? gameObject.AddComponent<SaveOnPauseListener>()
+                : null;
 
             builder.RegisterBuildCallback(r =>
             {
-                pauseListener.Bind(r.Resolve<ISaveService>());
+                if (pauseListener != null)
+                    pauseListener.Bind(r.Resolve<ISaveService>());
                 G.Initialize(r);
             });
         }
@@ -91,6 +107,14 @@ namespace EasyFramework
         readonly TimerService _timer;
         public TimerTicker(TimerService timer) => _timer = timer;
         public void Tick() => _timer.Tick();
+    }
+
+    /// <summary>把 UIService.Tick(返回键检测)桥接到 PlayerLoop Tick 循环。</summary>
+    sealed class UITicker : ITickable
+    {
+        readonly UIService _ui;
+        public UITicker(UIService ui) => _ui = ui;
+        public void Tick() => _ui.Tick();
     }
 
     /// <summary>把 AudioService.Tick(BGM 淡变推进)桥接到 Tick 循环。</summary>

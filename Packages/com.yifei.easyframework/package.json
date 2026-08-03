@@ -1,8 +1,8 @@
 {
   "name": "com.yifei.easyframework",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "displayName": "EasyFramework",
-  "description": "开箱即用的 Unity 2D 移动游戏复用底座。VContainer 依赖注入内核 + 静态门面,服务层全部接口化,商业化 SDK 可整体替换而不改业务代码。",
+  "description": "面向 Unity 2D、2.5D 与 3D 项目的模块化复用底座。VContainer 依赖注入内核 + 可选服务模块，UI 横竖屏与项目实现均可配置替换。",
   "unity": "6000.0",
   "author": {
     "name": "yifei"
@@ -11,12 +11,12 @@
   "documentationUrl": "https://github.com/whimwindgames/EasyFramework-Unity#readme",
   "changelogUrl": "https://github.com/whimwindgames/EasyFramework-Unity/blob/main/Packages/com.yifei.easyframework/CHANGELOG.md",
   "dependencies": {
-    "com.unity.addressables": "3.1.0",
-    "com.unity.cinemachine": "3.1.7",
+    "com.unity.addressables": "2.9.1",
+    "com.unity.cinemachine": "3.1.6",
     "com.unity.inputsystem": "1.19.0",
     "com.unity.ugui": "2.0.0",
-    "com.unity.nuget.newtonsoft-json": "3.2.1",
-    "com.cysharp.unitask": "2.5.10",
+    "com.unity.nuget.newtonsoft-json": "3.2.2",
+    "com.cysharp.unitask": "2.5.11",
     "jp.hadashikick.vcontainer": "1.16.9",
     "com.cysharp.messagepipe": "1.8.1",
     "com.cysharp.messagepipe.vcontainer": "1.8.1",

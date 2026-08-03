@@ -2,6 +2,28 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.3.0] - 2026-08-03
+
+### Added
+
+- 新增 `FrameworkFeatures` 与 `FrameworkFeatureSets.ExistingProject`，项目可按需启用资源、场景、存档、UI、输入、相机、对象池及商业化模块。
+- 新增资源、UI、输入、相机和对象池外部实现注册点，成熟项目可以保留既有运行时系统并渐进迁移到 VContainer。
+- 新增 `UIRootProfile`：支持任意参考分辨率、横屏/竖屏预设、宽高缩放权重、Overlay/Camera/WorldSpace Canvas、独立层级排序、安全区和 EventSystem 策略。
+- 新增 `IUIRootFactory` 与带所有权声明的 `UIRootHandle`，支持复用项目现有 Canvas、URP Overlay Camera 或自定义 UI 根结构。
+- HUD 改为按类型缓存，允许多个不同 HUD 同时显示，并支持按类型隐藏。
+
+### Changed
+
+- `FrameworkInstaller` 不再强制注册全部服务；Core 始终可用，未启用模块不会被构造或绑定到 `G`。
+- `G.Initialize` 对可选服务使用安全解析，关闭广告、内购、相机、输入或 UI 后仍能正常完成框架启动。
+- 默认 UI 配置继续保持 v0.2.1 的 `1080×1920` 竖屏行为，已有项目升级不会被强制改变布局。
+- 包定位从“仅 2D 小游戏”升级为支持 2D、2.5D 和 3D 项目的通用底座。
+- Addressables、Cinemachine、UniTask 与 Newtonsoft.Json 的依赖基线对齐捕鱼项目现用版本，减少接入时的包版本重解析。
+
+### Tests
+
+- 新增核心最小安装、缺失模块依赖、外部输入实现、横屏 Canvas、ScreenSpaceCamera 和多 HUD 回归测试。
+
 ## [0.2.1] - 2026-07-30
 
 ### Security

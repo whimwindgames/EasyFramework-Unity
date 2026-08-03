@@ -4,6 +4,7 @@ using EasyFramework.Services.Assets;
 using EasyFramework.Services.UI;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace EasyFramework.Tests
 {
@@ -37,6 +38,7 @@ namespace EasyFramework.Tests
         }
 
         sealed class HudPanel : UIPanel { }
+        sealed class SecondaryHudPanel : UIPanel { }
 
         // ---------------- 伪 prefab 工厂 ----------------
 
@@ -73,6 +75,7 @@ namespace EasyFramework.Tests
                 { "ui/BackConsumingWindow", MakePrefab<BackConsumingWindow>() },
                 { "ui/ConfirmPopup", MakePrefab<ConfirmPopup>() },
                 { "ui/HudPanel", MakePrefab<HudPanel>() },
+                { "ui/SecondaryHudPanel", MakePrefab<SecondaryHudPanel>() },
             };
             var wrongPrefab = MakePrefab<WindowA>();
             dict.Add("ui/MissingWindow", wrongPrefab);
@@ -203,20 +206,97 @@ namespace EasyFramework.Tests
         // ---------------- HUD ----------------
 
         [Test]
-        public void ShowHud_ReplacesPrevious_SingleInstance()
+        public void ShowHud_ReusesSameType()
         {
             var h1 = _ui.ShowHudAsync<HudPanel>().GetAwaiter().GetResult();
             var h2 = _ui.ShowHudAsync<HudPanel>().GetAwaiter().GetResult();
-            Assert.AreNotSame(h1, h2);
-            Assert.IsTrue(h1 == null || h1.gameObject == null, "旧 HUD 应已销毁");
+            Assert.AreSame(h1, h2);
+            Assert.AreEqual(1, _ui.HudCount);
         }
 
         [Test]
-        public void HideHud_RemovesCurrent()
+        public void ShowHud_AllowsDifferentTypesAtTheSameTime()
         {
-            var h = _ui.ShowHudAsync<HudPanel>().GetAwaiter().GetResult();
+            var primary = _ui.ShowHudAsync<HudPanel>().GetAwaiter().GetResult();
+            var secondary = _ui.ShowHudAsync<SecondaryHudPanel>().GetAwaiter().GetResult();
+
+            Assert.NotNull(primary);
+            Assert.NotNull(secondary);
+            Assert.AreEqual(2, _ui.HudCount);
+            Assert.IsTrue(primary.gameObject.activeSelf);
+            Assert.IsTrue(secondary.gameObject.activeSelf);
+        }
+
+        [Test]
+        public void HideHudOfType_LeavesOtherHudAlive()
+        {
+            var primary = _ui.ShowHudAsync<HudPanel>().GetAwaiter().GetResult();
+            var secondary = _ui.ShowHudAsync<SecondaryHudPanel>().GetAwaiter().GetResult();
+            _ui.HideHudAsync<HudPanel>().GetAwaiter().GetResult();
+
+            Assert.IsTrue(primary == null || primary.gameObject == null);
+            Assert.IsNotNull(secondary);
+            Assert.AreEqual(1, _ui.HudCount);
+        }
+
+        [Test]
+        public void HideHud_RemovesAllHuds()
+        {
+            var primary = _ui.ShowHudAsync<HudPanel>().GetAwaiter().GetResult();
+            var secondary = _ui.ShowHudAsync<SecondaryHudPanel>().GetAwaiter().GetResult();
             _ui.HideHudAsync().GetAwaiter().GetResult();
-            Assert.IsTrue(h == null || h.gameObject == null);
+            Assert.IsTrue(primary == null || primary.gameObject == null);
+            Assert.IsTrue(secondary == null || secondary.gameObject == null);
+            Assert.AreEqual(0, _ui.HudCount);
+        }
+
+        [Test]
+        public void LandscapeProfile_ConfiguresReferenceResolutionAndLayerSorting()
+        {
+            var profile = UIRootProfile.Landscape();
+            profile.ApplySafeArea = false;
+            profile.EnsureEventSystem = false;
+            profile.DontDestroyOnLoad = false;
+            profile.UseIndependentLayerSorting = true;
+
+            var handle = new DefaultUIRootFactory(profile).Create();
+            try
+            {
+                var scaler = handle.Root.GetComponent<CanvasScaler>();
+                Assert.AreEqual(new Vector2(1920f, 1080f), scaler.referenceResolution);
+                Assert.AreEqual(1f, scaler.matchWidthOrHeight);
+                Assert.AreEqual(0, handle.Layer(UILayer.Hud).GetComponent<Canvas>().sortingOrder);
+                Assert.AreEqual(300, handle.Layer(UILayer.Overlay).GetComponent<Canvas>().sortingOrder);
+                Assert.IsNull(handle.Layer(UILayer.Hud).GetComponent<SafeAreaFitter>());
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(handle.Root);
+            }
+        }
+
+        [Test]
+        public void ScreenSpaceCameraProfile_BindsConfiguredCamera()
+        {
+            var cameraObject = new GameObject("UI Camera");
+            var camera = cameraObject.AddComponent<Camera>();
+            var profile = UIRootProfile.Landscape();
+            profile.RenderMode = RenderMode.ScreenSpaceCamera;
+            profile.WorldCamera = camera;
+            profile.EnsureEventSystem = false;
+            profile.DontDestroyOnLoad = false;
+
+            var handle = new DefaultUIRootFactory(profile).Create();
+            try
+            {
+                Assert.AreEqual(RenderMode.ScreenSpaceCamera, handle.Canvas.renderMode);
+                Assert.AreSame(camera, handle.Canvas.worldCamera);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(handle.Root);
+                UnityEngine.Object.DestroyImmediate(cameraObject);
+            }
         }
 
         // ---------------- 返回键 ----------------
