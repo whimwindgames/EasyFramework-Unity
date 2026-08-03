@@ -2,6 +2,24 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.3.1] - 2026-08-03
+
+### Added
+
+- `IUIService` 新增 Overlay 页面 API：支持同类型复用并置顶、不同类型共存、按最近调用顺序叠放、按类型隐藏和全部隐藏。
+- 新增 `OverlayCount`，可观察当前全局 Overlay 数量。
+- `UIRootProfile` 新增 `WorldSpaceScale`，World Space Canvas 会应用参考分辨率尺寸和明确的像素到世界单位换算。
+- 补充跨程序集继承 `UIPanel`、生命周期访问级别及 `UIPopup.SetResult` 的迁移说明。
+
+### Changed
+
+- HUD 与 Overlay 共用缓存页面生命周期实现，统一进入串行 UI 操作队列，异常、取消和销毁行为保持一致。
+- Overlay 由 UI 服务正式管理，适用于全局 Loading、断线重连、登录遮罩和场景过场，不再需要项目侧另建静态管理器。
+
+### Tests
+
+- EditMode 增至 222 项，新增 Overlay 复用、共存顺序、精确关闭、全部关闭与 Dispose 销毁，以及 World Space Canvas 尺寸/缩放回归测试；3 项 PlayMode 冒烟继续通过。
+
 ## [0.3.0] - 2026-08-03
 
 ### Added

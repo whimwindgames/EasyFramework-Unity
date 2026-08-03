@@ -45,6 +45,13 @@ namespace EasyFramework.Services.UI
                 canvas.worldCamera = worldCamera;
             handle.Canvas = canvas;
 
+            if (profile.RenderMode == RenderMode.WorldSpace)
+            {
+                var rootRect = (RectTransform)root.transform;
+                rootRect.sizeDelta = profile.ReferenceResolution;
+                rootRect.localScale = Vector3.one * profile.WorldSpaceScale;
+            }
+
             var scaler = root.AddComponent<CanvasScaler>();
             scaler.uiScaleMode = profile.ScaleMode;
             scaler.referenceResolution = profile.ReferenceResolution;

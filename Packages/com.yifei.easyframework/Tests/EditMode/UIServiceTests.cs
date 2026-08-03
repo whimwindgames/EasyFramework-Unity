@@ -39,6 +39,8 @@ namespace EasyFramework.Tests
 
         sealed class HudPanel : UIPanel { }
         sealed class SecondaryHudPanel : UIPanel { }
+        sealed class OverlayPanel : UIPanel { }
+        sealed class SecondaryOverlayPanel : UIPanel { }
 
         // ---------------- 伪 prefab 工厂 ----------------
 
@@ -76,6 +78,8 @@ namespace EasyFramework.Tests
                 { "ui/ConfirmPopup", MakePrefab<ConfirmPopup>() },
                 { "ui/HudPanel", MakePrefab<HudPanel>() },
                 { "ui/SecondaryHudPanel", MakePrefab<SecondaryHudPanel>() },
+                { "ui/OverlayPanel", MakePrefab<OverlayPanel>() },
+                { "ui/SecondaryOverlayPanel", MakePrefab<SecondaryOverlayPanel>() },
             };
             var wrongPrefab = MakePrefab<WindowA>();
             dict.Add("ui/MissingWindow", wrongPrefab);
@@ -250,6 +254,68 @@ namespace EasyFramework.Tests
             Assert.AreEqual(0, _ui.HudCount);
         }
 
+        // ---------------- Overlay ----------------
+
+        [Test]
+        public void ShowOverlay_ReusesSameTypeAndUsesOverlayLayer()
+        {
+            var first = _ui.ShowOverlayAsync<OverlayPanel>().GetAwaiter().GetResult();
+            var second = _ui.ShowOverlayAsync<OverlayPanel>().GetAwaiter().GetResult();
+
+            Assert.AreSame(first, second);
+            Assert.AreEqual(1, _ui.OverlayCount);
+            Assert.AreEqual(UILayer.Overlay.ToString(), first.transform.parent.name);
+        }
+
+        [Test]
+        public void ShowOverlay_DifferentTypesFollowLatestShowOrder()
+        {
+            var first = _ui.ShowOverlayAsync<OverlayPanel>().GetAwaiter().GetResult();
+            var second = _ui.ShowOverlayAsync<SecondaryOverlayPanel>().GetAwaiter().GetResult();
+
+            Assert.AreEqual(2, _ui.OverlayCount);
+            Assert.AreSame(first.transform.parent, second.transform.parent);
+            Assert.Greater(second.transform.GetSiblingIndex(), first.transform.GetSiblingIndex());
+
+            var reusedFirst = _ui.ShowOverlayAsync<OverlayPanel>().GetAwaiter().GetResult();
+            Assert.AreSame(first, reusedFirst);
+            Assert.Greater(first.transform.GetSiblingIndex(), second.transform.GetSiblingIndex());
+        }
+
+        [Test]
+        public void HideOverlayOfType_LeavesOtherOverlayAlive()
+        {
+            var primary = _ui.ShowOverlayAsync<OverlayPanel>().GetAwaiter().GetResult();
+            var secondary = _ui.ShowOverlayAsync<SecondaryOverlayPanel>().GetAwaiter().GetResult();
+            _ui.HideOverlayAsync<OverlayPanel>().GetAwaiter().GetResult();
+
+            Assert.IsTrue(primary == null || primary.gameObject == null);
+            Assert.IsNotNull(secondary);
+            Assert.AreEqual(1, _ui.OverlayCount);
+        }
+
+        [Test]
+        public void HideOverlay_RemovesAllOverlays()
+        {
+            var primary = _ui.ShowOverlayAsync<OverlayPanel>().GetAwaiter().GetResult();
+            var secondary = _ui.ShowOverlayAsync<SecondaryOverlayPanel>().GetAwaiter().GetResult();
+            _ui.HideOverlayAsync().GetAwaiter().GetResult();
+
+            Assert.IsTrue(primary == null || primary.gameObject == null);
+            Assert.IsTrue(secondary == null || secondary.gameObject == null);
+            Assert.AreEqual(0, _ui.OverlayCount);
+        }
+
+        [Test]
+        public void Dispose_DestroysOverlays()
+        {
+            var overlay = _ui.ShowOverlayAsync<OverlayPanel>().GetAwaiter().GetResult();
+            _ui.Dispose();
+
+            Assert.IsTrue(overlay == null || overlay.gameObject == null);
+            Assert.AreEqual(0, _ui.OverlayCount);
+        }
+
         [Test]
         public void LandscapeProfile_ConfiguresReferenceResolutionAndLayerSorting()
         {
@@ -291,6 +357,35 @@ namespace EasyFramework.Tests
             {
                 Assert.AreEqual(RenderMode.ScreenSpaceCamera, handle.Canvas.renderMode);
                 Assert.AreSame(camera, handle.Canvas.worldCamera);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(handle.Root);
+                UnityEngine.Object.DestroyImmediate(cameraObject);
+            }
+        }
+
+        [Test]
+        public void WorldSpaceProfile_AppliesReferenceSizeScaleAndCamera()
+        {
+            var cameraObject = new GameObject("World UI Camera");
+            var camera = cameraObject.AddComponent<Camera>();
+            var profile = UIRootProfile.Landscape();
+            profile.RenderMode = RenderMode.WorldSpace;
+            profile.WorldCamera = camera;
+            profile.WorldSpaceScale = 0.002f;
+            profile.ApplySafeArea = false;
+            profile.EnsureEventSystem = false;
+            profile.DontDestroyOnLoad = false;
+
+            var handle = new DefaultUIRootFactory(profile).Create();
+            try
+            {
+                var rootRect = (RectTransform)handle.Root.transform;
+                Assert.AreEqual(RenderMode.WorldSpace, handle.Canvas.renderMode);
+                Assert.AreSame(camera, handle.Canvas.worldCamera);
+                Assert.AreEqual(new Vector2(1920f, 1080f), rootRect.sizeDelta);
+                Assert.AreEqual(Vector3.one * 0.002f, rootRect.localScale);
             }
             finally
             {

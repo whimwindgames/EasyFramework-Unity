@@ -28,6 +28,8 @@ namespace EasyFramework.Services.UI
         public Camera WorldCamera;
         public bool UseMainCameraWhenWorldCameraMissing = true;
         public float PlaneDistance = 100f;
+        [Tooltip("WorldSpace 模式下根 Canvas 的世界缩放。0.001 表示 1920 像素对应 1.92 世界单位。")]
+        public float WorldSpaceScale = 0.001f;
         public string SortingLayerName = "Default";
         public int SortingOrder;
 
@@ -75,6 +77,8 @@ namespace EasyFramework.Services.UI
                 throw new InvalidOperationException("UI reference pixels per unit must be positive.");
             if (PlaneDistance <= 0f && RenderMode == RenderMode.ScreenSpaceCamera)
                 throw new InvalidOperationException("UI plane distance must be positive in ScreenSpaceCamera mode.");
+            if (WorldSpaceScale <= 0f && RenderMode == RenderMode.WorldSpace)
+                throw new InvalidOperationException("UI world-space scale must be positive in WorldSpace mode.");
             if (LayerSortingStep < 0)
                 throw new InvalidOperationException("UI layer sorting step cannot be negative.");
         }
